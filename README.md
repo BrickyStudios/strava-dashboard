@@ -2,6 +2,8 @@
 
 This repository contains a Strava MCP which you can add to your Claude Desktop client. Once installed, you'll be able to ask Claude all about your activities!
 
+Checkout my blog post [here](https://jonocx.github.io/blog/2025/strava-mcp/)
+
 ## Setup
 
 ### Dependencies
