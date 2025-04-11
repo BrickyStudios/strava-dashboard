@@ -14,7 +14,7 @@ Checkout my blog post [here](https://jonocx.github.io/blog/2025/strava-mcp/)
 
 ### Connecting to Strava
 
-Once you have an app setup on your Strava profile and you've cloned this repository, create an `.env` file at the root with the following contents:
+Once you have an [app setup](https://www.strava.com/settings/api) on your Strava profile and you've cloned this repository, create an `.env` file at the root with the following contents:
 
 ```bash
 STRAVA_CLIENT_ID=<fill-me-in>
