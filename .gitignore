@@ -1,3 +1,6 @@
+# Project data directory (SQLite cache, etc.)
+data/
+
 # Python-generated files
 __pycache__/
 *.py[oc]
