@@ -18,6 +18,12 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 79
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
