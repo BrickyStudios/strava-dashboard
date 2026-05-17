@@ -1,10 +1,13 @@
 """Strava MCP server for Claude to interact with the Strava API."""
 
 import logging
+from datetime import date, timedelta
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
 from lib.api import get_activities, get_activity, get_access_token
+from lib.db import get_conn, init_db, get_activities as get_db_activities
 from lib.helpers import (
     parse_activities,
     format_activity,
@@ -114,6 +117,150 @@ async def fetch_activities(
     return "\n---\n".join(
         [format_activity(activity=activity) for activity in activities]
     )
+
+
+def _iso_week_label(d: date) -> str:
+    iso = d.isocalendar()
+    return f"{iso.year}-W{iso.week:02d}"
+
+
+def _week_start(d: date) -> date:
+    """Monday of the ISO week containing d."""
+    return d - timedelta(days=d.weekday())
+
+
+def _trailing_weeks(n: int) -> list[str]:
+    today = date.today()
+    monday = _week_start(today)
+    return [_iso_week_label(monday - timedelta(weeks=i)) for i in range(n - 1, -1, -1)]
+
+
+@mcp.tool()
+def get_performance_trend(
+    sport_type: str | None,
+    metric: Literal["avg_speed_kmh", "distance_km", "elevation_m"],
+    weeks: int = 12,
+) -> str:
+    """Weekly performance trend from local DB.
+
+    Args:
+        sport_type: Strava sport type (e.g. 'GravelRide') or None for all.
+        metric: 'avg_speed_kmh', 'distance_km', or 'elevation_m'.
+        weeks: number of trailing ISO weeks to show.
+
+    Returns:
+        Formatted table of per-week aggregates.
+    """
+    conn = get_conn()
+    init_db(conn)
+    rows = get_db_activities(conn, sport_type=sport_type)
+
+    buckets: dict[str, dict] = {}
+    for row in rows:
+        local_date = date.fromisoformat(row["start_date_local"][:10])
+        label = _iso_week_label(local_date)
+        if label not in buckets:
+            buckets[label] = {"dist": 0.0, "time": 0, "elev": 0.0}
+        buckets[label]["dist"] += row["distance_m"] or 0
+        buckets[label]["time"] += row["moving_time_s"] or 0
+        buckets[label]["elev"] += row["elevation_gain_m"] or 0
+
+    header_map = {
+        "avg_speed_kmh": "Avg Speed (km/h)",
+        "distance_km": "Distance (km)",
+        "elevation_m": "Elevation (m)",
+    }
+    lines = [f"{'Week':<12} {header_map[metric]}"]
+    for label in _trailing_weeks(weeks):
+        b = buckets.get(label)
+        if b is None or b["time"] == 0:
+            lines.append(f"{label:<12} —")
+        elif metric == "avg_speed_kmh":
+            val = round(b["dist"] / b["time"] * 3.6, 1)
+            lines.append(f"{label:<12} {val}")
+        elif metric == "distance_km":
+            lines.append(f"{label:<12} {round(b['dist'] / 1000, 1)}")
+        else:
+            lines.append(f"{label:<12} {round(b['elev'])}")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_weekly_volume(
+    sport_type: str | None,
+    weeks: int = 12,
+) -> str:
+    """Weekly distance and elevation totals from local DB.
+
+    Args:
+        sport_type: Strava sport type or None for all.
+        weeks: number of trailing ISO weeks.
+
+    Returns:
+        Formatted table with km and elevation per week.
+    """
+    conn = get_conn()
+    init_db(conn)
+    rows = get_db_activities(conn, sport_type=sport_type)
+
+    buckets: dict[str, dict] = {}
+    for row in rows:
+        local_date = date.fromisoformat(row["start_date_local"][:10])
+        label = _iso_week_label(local_date)
+        if label not in buckets:
+            buckets[label] = {"dist": 0.0, "elev": 0.0}
+        buckets[label]["dist"] += row["distance_m"] or 0
+        buckets[label]["elev"] += row["elevation_gain_m"] or 0
+
+    lines = [f"{'Week':<12} {'km':>8} {'Elevation (m)':>14}"]
+    for label in _trailing_weeks(weeks):
+        b = buckets.get(label)
+        if b is None:
+            lines.append(f"{label:<12} {'—':>8} {'—':>14}")
+        else:
+            lines.append(f"{label:<12} {round(b['dist'] / 1000, 1):>8} {round(b['elev']):>14}")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_personal_bests(sport_type: str | None) -> str:
+    """Personal bests from all synced activities.
+
+    Args:
+        sport_type: Strava sport type or None for all.
+
+    Returns:
+        Formatted string with longest distance, duration, fastest speed, most elevation.
+    """
+    conn = get_conn()
+    init_db(conn)
+    rows = get_db_activities(conn, sport_type=sport_type)
+
+    if not rows:
+        return "No activities found. Run: uv run sync.py"
+
+    best_dist = max(rows, key=lambda r: r["distance_m"] or 0)
+    best_dur = max(rows, key=lambda r: r["moving_time_s"] or 0)
+    best_speed = max(rows, key=lambda r: r["avg_speed_ms"] or 0)
+    best_elev = max(rows, key=lambda r: r["elevation_gain_m"] or 0)
+
+    def fmt(row, extra):
+        d = date.fromisoformat(row["start_date_local"][:10])
+        return f"{row['name']} ({d}) — {extra}"
+
+    dist_km = round((best_dist["distance_m"] or 0) / 1000, 1)
+    dur_min = round((best_dur["moving_time_s"] or 0) / 60)
+    spd_kmh = round((best_speed["avg_speed_ms"] or 0) * 3.6, 1)
+    elev_m = round(best_elev["elevation_gain_m"] or 0)
+
+    return "\n".join([
+        f"longest_distance:  {fmt(best_dist, f'{dist_km} km')}",
+        f"longest_duration:  {fmt(best_dur, f'{dur_min} min')}",
+        f"fastest_avg_speed: {fmt(best_speed, f'{spd_kmh} km/h')}",
+        f"most_elevation:    {fmt(best_elev, f'{elev_m} m')}",
+    ])
 
 
 if __name__ == "__main__":
