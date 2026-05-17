@@ -28,6 +28,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             max_speed_ms      REAL,
             avg_heartrate     REAL,
             kilojoules        REAL,
+            ai_comment        TEXT,
             raw_json          TEXT
         );
 
@@ -37,7 +38,12 @@ def init_db(conn: sqlite3.Connection) -> None:
             total_activities  INTEGER
         );
     """)
-    conn.commit()
+    # Safe migration for DBs created before ai_comment column existed
+    try:
+        conn.execute("ALTER TABLE activities ADD COLUMN ai_comment TEXT")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
 
 
 def upsert_activity(conn: sqlite3.Connection, activity: dict) -> None:

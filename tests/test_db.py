@@ -73,3 +73,29 @@ def test_get_activities_filter_by_date(db_with_activities):
     )
     assert len(rows) == 1
     assert rows[0]["id"] == 2
+
+
+def test_init_db_adds_ai_comment_column(db):
+    cols = [row[1] for row in db.execute("PRAGMA table_info(activities)").fetchall()]
+    assert "ai_comment" in cols
+
+
+def test_init_db_is_idempotent_with_existing_ai_comment(db):
+    from lib.db import init_db
+    init_db(db)  # second call — should not crash
+
+
+def test_ai_comment_round_trip(db):
+    from lib.db import upsert_activity
+    upsert_activity(db, {
+        "id": 99, "name": "Test", "sport_type": "GravelRide",
+        "start_date": "2026-05-01T10:00:00Z",
+        "start_date_local": "2026-05-01T12:00:00",
+        "distance": 40000.0, "moving_time": 6000,
+        "total_elevation_gain": 200.0, "average_speed": 6.5,
+        "max_speed": 15.0, "average_heartrate": None, "kilojoules": 700.0,
+    })
+    db.execute("UPDATE activities SET ai_comment = 'Gute Fahrt!' WHERE id = 99")
+    db.commit()
+    row = db.execute("SELECT ai_comment FROM activities WHERE id = 99").fetchone()
+    assert row[0] == "Gute Fahrt!"
