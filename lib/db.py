@@ -38,12 +38,14 @@ def init_db(conn: sqlite3.Connection) -> None:
             total_activities  INTEGER
         );
     """)
+    conn.commit()  # explicit commit after DDL
     # Safe migration for DBs created before ai_comment column existed
     try:
         conn.execute("ALTER TABLE activities ADD COLUMN ai_comment TEXT")
         conn.commit()
-    except Exception:
-        pass  # Column already exists
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" not in str(e):
+            raise
 
 
 def upsert_activity(conn: sqlite3.Connection, activity: dict) -> None:

@@ -85,6 +85,26 @@ def test_init_db_is_idempotent_with_existing_ai_comment(db):
     init_db(db)  # second call — should not crash
 
 
+def test_migration_adds_ai_comment_to_old_schema(db):
+    # Simulate a DB that existed before the ai_comment column was added
+    db.execute("DROP TABLE activities")
+    db.execute("""
+        CREATE TABLE activities (
+            id INTEGER PRIMARY KEY, name TEXT, sport_type TEXT,
+            start_date_utc TEXT, start_date_local TEXT,
+            distance_m REAL, moving_time_s INTEGER,
+            elevation_gain_m REAL, avg_speed_ms REAL,
+            max_speed_ms REAL, avg_heartrate REAL,
+            kilojoules REAL, raw_json TEXT
+        )
+    """)
+    db.commit()
+    from lib.db import init_db
+    init_db(db)
+    cols = [row[1] for row in db.execute("PRAGMA table_info(activities)").fetchall()]
+    assert "ai_comment" in cols
+
+
 def test_ai_comment_round_trip(db):
     from lib.db import upsert_activity
     upsert_activity(db, {
