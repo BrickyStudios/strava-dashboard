@@ -287,6 +287,8 @@ def _dashboard_html() -> str:
   <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0..1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -456,7 +458,7 @@ def _dashboard_html() -> str:
       const comment = act.ai_comment
         ? `<p class="text-xs text-muted italic mt-1">${act.ai_comment}</p>` : '';
       return `
-        <div class="bg-surface-low border border-border rounded-lg p-3 flex items-start gap-3 hover:border-lime/30 transition-colors">
+        <div class="bg-surface-low border border-border rounded-lg p-3 flex items-start gap-3 hover:border-lime/30 transition-colors cursor-pointer" onclick="openDetail(${act.id})">
           <div class="w-10 h-10 rounded-full bg-surface-high flex items-center justify-center shrink-0">
             <span class="material-symbols-outlined text-muted text-lg">${icon}</span>
           </div>
@@ -514,7 +516,164 @@ def _dashboard_html() -> str:
     document.getElementById('sport').addEventListener('change', load);
     document.getElementById('weeks').addEventListener('change', load);
     load();
+
+    // ---- Polyline decoder (Google Encoded Polyline Algorithm) ----
+    function decodePolyline(encoded) {
+      const coords = [];
+      let idx = 0, lat = 0, lng = 0;
+      while (idx < encoded.length) {
+        let b, shift = 0, result = 0;
+        do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+        shift = 0; result = 0;
+        do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+        coords.push([lat / 1e5, lng / 1e5]);
+      }
+      return coords;
+    }
+
+    let _leafletMap = null;
+
+    function initMap(polyline) {
+      const container = document.getElementById('panel-map');
+      if (!polyline) {
+        container.innerHTML = '<span class="text-xs text-muted">Keine Route verfügbar</span>';
+        return;
+      }
+      container.innerHTML = '';
+      if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
+      const coords = decodePolyline(polyline);
+      _leafletMap = L.map(container, { zoomControl: false, attributionControl: false });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(_leafletMap);
+      const line = L.polyline(coords, { color: '#abd600', weight: 3 }).addTo(_leafletMap);
+      _leafletMap.fitBounds(line.getBounds(), { padding: [8, 8] });
+    }
+
+    function statCard(label, value, unit='') {
+      if (value === null || value === undefined) return '';
+      return `<div class="bg-surface-low border border-border rounded-lg p-3">
+        <p class="text-xs text-muted mb-1">${label}</p>
+        <p class="text-base font-bold text-on-surface">${value}<span class="text-xs font-normal text-muted ml-1">${unit}</span></p>
+      </div>`;
+    }
+
+    async function loadDetailComment(id) {
+      const el = document.getElementById('panel-ai');
+      try {
+        const r = await fetch(`/api/activity/${id}/detail-comment`);
+        const d = await r.json();
+        el.textContent = d.comment || 'Keine Analyse verfügbar.';
+      } catch {
+        el.textContent = 'Analyse konnte nicht geladen werden.';
+      }
+    }
+
+    async function openDetail(id) {
+      const panel = document.getElementById('detail-panel');
+      const overlay = document.getElementById('panel-overlay');
+
+      // Reset panel state
+      document.getElementById('panel-name').textContent = '…';
+      document.getElementById('panel-meta').textContent = '';
+      document.getElementById('panel-grade').textContent = '';
+      document.getElementById('panel-grade').className = 'w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0';
+      document.getElementById('panel-stats').innerHTML = '';
+      document.getElementById('panel-map').innerHTML = '<span class="text-xs text-muted">Lädt…</span>';
+      document.getElementById('panel-ai').innerHTML = '<span class="animate-pulse">Analyse wird geladen…</span>';
+
+      // Slide in
+      overlay.classList.remove('hidden');
+      requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
+
+      try {
+        const r = await fetch(`/api/activity/${id}`);
+        if (!r.ok) return;
+        const d = await r.json();
+
+        document.getElementById('panel-name').textContent = d.name;
+        document.getElementById('panel-meta').textContent =
+          `${d.date} · ${d.sport_type} · Note ${d.grade}`;
+
+        const gradeEl = document.getElementById('panel-grade');
+        gradeEl.textContent = d.grade;
+        gradeEl.className = `w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${GRADE_CLASS[d.grade] || 'grade-c'}`;
+
+        document.getElementById('panel-stats').innerHTML = [
+          statCard('Distanz', d.distance_km, 'km'),
+          statCard('Dauer', d.duration_min, 'min'),
+          statCard('Ø Tempo', d.avg_speed_kmh, 'km/h'),
+          statCard('Tempo EAS', d.eas_kmh, 'km/h'),
+          statCard('Max-Tempo', d.max_speed_kmh, 'km/h'),
+          statCard('Höhenmeter', d.elevation_gain_m, 'm'),
+          statCard('Höchster Punkt', d.elev_high_m ? Math.round(d.elev_high_m) : null, 'm'),
+          statCard('Tiefster Punkt', d.elev_low_m ? Math.round(d.elev_low_m) : null, 'm'),
+          statCard('Herzfrequenz Ø', d.avg_heartrate ? Math.round(d.avg_heartrate) : null, 'bpm'),
+          statCard('Max Herzfrequenz', d.max_heartrate, 'bpm'),
+          statCard('Leistung Ø', d.avg_watts, 'W'),
+          statCard('Energie', d.kilojoules, 'kJ'),
+          statCard('Strava PRs', d.pr_count || null, ''),
+        ].join('');
+
+        initMap(d.summary_polyline);
+        loadDetailComment(id);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function closePanel() {
+      const panel = document.getElementById('detail-panel');
+      const overlay = document.getElementById('panel-overlay');
+      panel.classList.add('translate-x-full');
+      overlay.classList.add('hidden');
+      if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
+    }
   </script>
+
+  <!-- Overlay -->
+  <div id="panel-overlay" class="fixed inset-0 bg-black/40 z-20 hidden" onclick="closePanel()"></div>
+
+  <!-- Detail Panel -->
+  <aside id="detail-panel"
+    class="fixed top-0 right-0 h-full w-full sm:w-[420px] bg-surface border-l border-border z-30
+           transform translate-x-full transition-transform duration-300 ease-out overflow-y-auto">
+
+    <!-- Panel Header -->
+    <div class="sticky top-0 bg-surface border-b border-border px-4 py-3 flex items-center gap-3">
+      <button onclick="closePanel()" class="text-muted hover:text-on-surface transition-colors">
+        <span class="material-symbols-outlined text-xl">arrow_back</span>
+      </button>
+      <div class="flex-1 min-w-0">
+        <p id="panel-name" class="text-sm font-semibold text-on-surface truncate"></p>
+        <p id="panel-meta" class="text-xs text-muted"></p>
+      </div>
+      <div id="panel-grade" class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"></div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="px-4 py-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Stats</h3>
+      <div id="panel-stats" class="grid grid-cols-2 gap-2"></div>
+    </div>
+
+    <!-- Route Map -->
+    <div class="px-4 pb-4">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Route</h3>
+      <div id="panel-map" class="rounded-lg overflow-hidden h-48 bg-surface-low border border-border
+                                  flex items-center justify-center text-muted text-xs">
+        <span>Keine Route verfügbar</span>
+      </div>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="px-4 pb-8">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">KI-Analyse</h3>
+      <div id="panel-ai" class="text-sm text-muted italic leading-relaxed">
+        <span class="animate-pulse">Analyse wird geladen…</span>
+      </div>
+    </div>
+  </aside>
 </body>
 </html>"""
 
