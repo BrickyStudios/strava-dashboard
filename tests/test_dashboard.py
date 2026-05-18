@@ -1,12 +1,11 @@
 import pytest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
+import dashboard
 
 
 def test_root_empty_state(db):
     with patch("dashboard.get_conn", return_value=db):
-        import importlib, dashboard
-        importlib.reload(dashboard)
         client = TestClient(dashboard.app)
         resp = client.get("/")
     assert resp.status_code == 200
@@ -15,8 +14,6 @@ def test_root_empty_state(db):
 
 def test_root_has_tailwind(db_with_many_activities):
     with patch("dashboard.get_conn", return_value=db_with_many_activities):
-        import importlib, dashboard
-        importlib.reload(dashboard)
         client = TestClient(dashboard.app)
         resp = client.get("/")
     assert resp.status_code == 200
@@ -25,8 +22,6 @@ def test_root_has_tailwind(db_with_many_activities):
 
 def test_api_data_shape(db_with_many_activities):
     with patch("dashboard.get_conn", return_value=db_with_many_activities):
-        import importlib, dashboard
-        importlib.reload(dashboard)
         client = TestClient(dashboard.app)
         resp = client.get("/api/data?sport_type=GravelRide&weeks=4")
     assert resp.status_code == 200
@@ -39,8 +34,6 @@ def test_api_data_shape(db_with_many_activities):
 
 def test_api_summary_fields(db_with_many_activities):
     with patch("dashboard.get_conn", return_value=db_with_many_activities):
-        import importlib, dashboard
-        importlib.reload(dashboard)
         client = TestClient(dashboard.app)
         resp = client.get("/api/data?sport_type=GravelRide&weeks=4")
     s = resp.json()["summary"]
@@ -55,8 +48,6 @@ def test_api_summary_fields(db_with_many_activities):
 
 def test_api_activities_have_grade_and_comment(db_with_many_activities):
     with patch("dashboard.get_conn", return_value=db_with_many_activities):
-        import importlib, dashboard
-        importlib.reload(dashboard)
         client = TestClient(dashboard.app)
         resp = client.get("/api/data?sport_type=GravelRide&weeks=12")
     activities = resp.json()["activities"]
@@ -69,8 +60,6 @@ def test_api_activities_have_grade_and_comment(db_with_many_activities):
 
 def test_api_trends_length_matches_weeks(db_with_many_activities):
     with patch("dashboard.get_conn", return_value=db_with_many_activities):
-        import importlib, dashboard
-        importlib.reload(dashboard)
         client = TestClient(dashboard.app)
         resp = client.get("/api/data?weeks=12")
     trends = resp.json()["trends"]
@@ -81,8 +70,6 @@ def test_api_trends_length_matches_weeks(db_with_many_activities):
 
 def test_api_sport_filter(db_with_many_activities):
     with patch("dashboard.get_conn", return_value=db_with_many_activities):
-        import importlib, dashboard
-        importlib.reload(dashboard)
         client = TestClient(dashboard.app)
         resp = client.get("/api/data?sport_type=Run&weeks=4")
     # No Run activities in fixture → activities list empty, summary zeros

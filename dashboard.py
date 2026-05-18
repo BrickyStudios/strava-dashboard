@@ -117,7 +117,9 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
     recent = sorted(row_dicts, key=lambda r: r.get("start_date_local") or "", reverse=True)[:10]
     activity_list = []
     for r in recent:
-        grade = compute_grade(r, row_dicts)
+        sport = r.get("sport_type")
+        sport_peers = [a for a in row_dicts if a.get("sport_type") == sport]
+        grade = compute_grade(r, sport_peers)
         start = (r.get("start_date_local") or "")[:10]
         try:
             d = date.fromisoformat(start)
