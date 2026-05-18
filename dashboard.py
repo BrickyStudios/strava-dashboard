@@ -208,7 +208,7 @@ def api_activity_detail(activity_id: int):
         "elev_low_m": raw.get("elev_low"),
         "avg_heartrate": r.get("avg_heartrate"),
         "max_heartrate": raw.get("max_heartrate"),
-        "avg_watts": round(avg_watts) if avg_watts else None,
+        "avg_watts": round(avg_watts) if avg_watts is not None else None,
         "kilojoules": round(r["kilojoules"]) if r.get("kilojoules") is not None else None,
         "pr_count": raw.get("pr_count") or 0,
         "grade": grade,
