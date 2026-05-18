@@ -453,17 +453,21 @@ def _dashboard_html() -> str:
       return `<div class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${cls}">${grade}</div>`;
     }
 
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     function activityCard(act) {
       const icon = SPORT_ICON[act.sport_type] || 'fitness_center';
       const comment = act.ai_comment
-        ? `<p class="text-xs text-muted italic mt-1">${act.ai_comment}</p>` : '';
+        ? `<p class="text-xs text-muted italic mt-1">${escapeHtml(act.ai_comment)}</p>` : '';
       return `
         <div class="bg-surface-low border border-border rounded-lg p-3 flex items-start gap-3 hover:border-lime/30 transition-colors cursor-pointer" onclick="openDetail(${act.id})">
           <div class="w-10 h-10 rounded-full bg-surface-high flex items-center justify-center shrink-0">
             <span class="material-symbols-outlined text-muted text-lg">${icon}</span>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-on-surface truncate">${act.name}</p>
+            <p class="text-sm font-semibold text-on-surface truncate">${escapeHtml(act.name)}</p>
             <p class="text-xs text-muted">${act.date} · ${act.distance_km} km · ${act.duration_min} min · ${act.avg_speed_kmh} km/h EAS</p>
             ${comment}
           </div>
@@ -544,7 +548,7 @@ def _dashboard_html() -> str:
       container.innerHTML = '';
       if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
       const coords = decodePolyline(polyline);
-      _leafletMap = L.map(container, { zoomControl: false, attributionControl: false });
+      _leafletMap = L.map(container, { zoomControl: false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(_leafletMap);
       const line = L.polyline(coords, { color: '#abd600', weight: 3 }).addTo(_leafletMap);
       _leafletMap.fitBounds(line.getBounds(), { padding: [8, 8] });
@@ -606,9 +610,9 @@ def _dashboard_html() -> str:
           statCard('Tempo EAS', d.eas_kmh, 'km/h'),
           statCard('Max-Tempo', d.max_speed_kmh, 'km/h'),
           statCard('Höhenmeter', d.elevation_gain_m, 'm'),
-          statCard('Höchster Punkt', d.elev_high_m ? Math.round(d.elev_high_m) : null, 'm'),
-          statCard('Tiefster Punkt', d.elev_low_m ? Math.round(d.elev_low_m) : null, 'm'),
-          statCard('Herzfrequenz Ø', d.avg_heartrate ? Math.round(d.avg_heartrate) : null, 'bpm'),
+          statCard('Höchster Punkt', d.elev_high_m != null ? Math.round(d.elev_high_m) : null, 'm'),
+          statCard('Tiefster Punkt', d.elev_low_m != null ? Math.round(d.elev_low_m) : null, 'm'),
+          statCard('Herzfrequenz Ø', d.avg_heartrate != null ? Math.round(d.avg_heartrate) : null, 'bpm'),
           statCard('Max Herzfrequenz', d.max_heartrate, 'bpm'),
           statCard('Leistung Ø', d.avg_watts, 'W'),
           statCard('Energie', d.kilojoules, 'kJ'),

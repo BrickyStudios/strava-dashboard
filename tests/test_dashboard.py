@@ -115,4 +115,4 @@ def test_activity_detail_comment_returns_json(db_with_many_activities):
         client = TestClient(dashboard.app)
         resp = client.get("/api/activity/5/detail-comment")
     assert resp.status_code == 200
-    assert "comment" in resp.json()
+    assert resp.json()["comment"] == "Klasse Fahrt!"
