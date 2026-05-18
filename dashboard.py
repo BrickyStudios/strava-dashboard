@@ -187,8 +187,245 @@ def _empty_html() -> str:
 
 
 def _dashboard_html() -> str:
-    # Implemented in Task 6
-    return _empty_html()
+    return """<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gravel Dashboard</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0..1&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'bg':       '#131316',
+            'surface':  '#1f1f22',
+            'surface-low': '#1b1b1e',
+            'surface-high': '#2a2a2d',
+            'border':   '#353438',
+            'on-surface': '#e4e1e6',
+            'muted':    '#c4c9ac',
+            'lime':     '#abd600',
+            'lime-bright': '#c3f400',
+            'orange':   '#f18400',
+          },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .grade-ap { background:#c3f400; color:#161e00; }
+    .grade-a  { background:#abd60099; color:#161e00; }
+    .grade-bp { background:#f18400; color:#2f1500; }
+    .grade-b  { background:#2a2a2d; color:#e4e1e6; border:1px solid #353438; }
+    .grade-c  { background:#1b1b1e; color:#8e9379; border:1px solid #353438; }
+  </style>
+</head>
+<body class="bg-bg text-on-surface min-h-screen">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-10 bg-bg/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
+    <h1 class="text-lg font-bold tracking-tight text-lime">GRAVEL DASHBOARD</h1>
+    <div class="flex gap-3 items-center">
+      <select id="sport" class="bg-surface border border-border text-on-surface text-sm rounded px-2 py-1 focus:outline-none focus:border-lime">
+        <option value="">Alle</option>
+        <option value="GravelRide" selected>Gravel</option>
+        <option value="Run">Laufen</option>
+      </select>
+      <select id="weeks" class="bg-surface border border-border text-on-surface text-sm rounded px-2 py-1 focus:outline-none focus:border-lime">
+        <option value="4">4 Wochen</option>
+        <option value="12" selected>12 Wochen</option>
+        <option value="26">26 Wochen</option>
+        <option value="52">52 Wochen</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 py-6 space-y-8">
+
+    <!-- Weekly Summary -->
+    <section>
+      <div class="flex justify-between items-baseline mb-3">
+        <h2 class="text-base font-semibold text-on-surface">Wochenzusammenfassung</h2>
+        <span id="week-label" class="text-xs text-muted"></span>
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
+          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Distanz</span>
+          <div class="flex items-baseline gap-1 mb-3">
+            <span id="s-km" class="text-3xl font-bold text-on-surface">—</span>
+            <span class="text-xs text-muted">km</span>
+          </div>
+          <div id="badge-km" class="text-xs mb-2"></div>
+          <svg id="spark-km" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
+          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Tempo EAS</span>
+          <div class="flex items-baseline gap-1 mb-3">
+            <span id="s-speed" class="text-3xl font-bold text-on-surface">—</span>
+            <span class="text-xs text-muted">km/h</span>
+          </div>
+          <div id="badge-speed" class="text-xs mb-2"></div>
+          <svg id="spark-speed" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
+          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Höhenmeter</span>
+          <div class="flex items-baseline gap-1 mb-3">
+            <span id="s-elev" class="text-3xl font-bold text-on-surface">—</span>
+            <span class="text-xs text-muted">m</span>
+          </div>
+          <div id="badge-elev" class="text-xs mb-2"></div>
+          <svg id="spark-elev" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- Activity Feed -->
+    <section>
+      <h2 class="text-base font-semibold text-on-surface mb-3">Letzte Einheiten</h2>
+      <div id="activity-feed" class="space-y-2"></div>
+    </section>
+
+    <!-- Trends -->
+    <section>
+      <h2 class="text-base font-semibold text-on-surface mb-3">Trends</h2>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-surface-low border border-border rounded-lg p-4">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-muted">Tempo EAS</span>
+            <span id="trend-speed-badge" class="text-xs font-semibold text-lime"></span>
+          </div>
+          <svg id="trend-speed" class="w-full h-16" viewBox="0 0 200 48" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="bg-surface-low border border-border rounded-lg p-4">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-muted">km / Woche</span>
+            <span id="trend-km-badge" class="text-xs font-semibold text-orange"></span>
+          </div>
+          <svg id="trend-km" class="w-full h-16" viewBox="0 0 200 48" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    const GRADE_CLASS = {'A+':'grade-ap','A':'grade-a','B+':'grade-bp','B':'grade-b','C':'grade-c'};
+    const SPORT_ICON = {'GravelRide':'directions_bike','Run':'directions_run'};
+
+    function sparklinePath(values, w, h, pad=2) {
+      const valid = values.filter(v => v !== null);
+      if (!valid.length) return '';
+      const mn = Math.min(...valid), mx = Math.max(...valid);
+      const range = mx - mn || 1;
+      const step = w / (values.length - 1 || 1);
+      const pts = values.map((v, i) => {
+        if (v === null) return null;
+        return [i * step, h - pad - ((v - mn) / range) * (h - pad * 2)];
+      });
+      let d = '', prev = null;
+      for (const pt of pts) {
+        if (!pt) { prev = null; continue; }
+        d += prev ? `L${pt[0].toFixed(1)},${pt[1].toFixed(1)}` : `M${pt[0].toFixed(1)},${pt[1].toFixed(1)}`;
+        prev = pt;
+      }
+      return d;
+    }
+
+    function renderSparkline(svgId, values, color) {
+      const svg = document.getElementById(svgId);
+      if (!svg) return;
+      const vb = svg.getAttribute('viewBox').split(' ');
+      const w = +vb[2], h = +vb[3];
+      const d = sparklinePath(values, w, h);
+      svg.innerHTML = d ? `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>` : '';
+    }
+
+    function pctBadge(pct, elId) {
+      const el = document.getElementById(elId);
+      if (!el || pct === null || pct === undefined) { if(el) el.textContent=''; return; }
+      const arrow = pct >= 0 ? '↑' : '↓';
+      const cls = pct >= 0 ? 'text-lime' : 'text-orange';
+      el.innerHTML = `<span class="${cls}">${arrow} ${Math.abs(pct)}% vs. VW</span>`;
+    }
+
+    function gradeEl(grade) {
+      const cls = GRADE_CLASS[grade] || 'grade-c';
+      return `<div class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${cls}">${grade}</div>`;
+    }
+
+    function activityCard(act) {
+      const icon = SPORT_ICON[act.sport_type] || 'fitness_center';
+      const comment = act.ai_comment
+        ? `<p class="text-xs text-muted italic mt-1">${act.ai_comment}</p>` : '';
+      return `
+        <div class="bg-surface-low border border-border rounded-lg p-3 flex items-start gap-3 hover:border-lime/30 transition-colors">
+          <div class="w-10 h-10 rounded-full bg-surface-high flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-muted text-lg">${icon}</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-on-surface truncate">${act.name}</p>
+            <p class="text-xs text-muted">${act.date} · ${act.distance_km} km · ${act.duration_min} min · ${act.avg_speed_kmh} km/h EAS</p>
+            ${comment}
+          </div>
+          ${gradeEl(act.grade)}
+        </div>`;
+    }
+
+    async function load() {
+      const sport = document.getElementById('sport').value;
+      const weeks = document.getElementById('weeks').value;
+      const r = await fetch(`/api/data?sport_type=${sport}&weeks=${weeks}`);
+      const d = await r.json();
+
+      // Summary
+      document.getElementById('week-label').textContent = d.week_label;
+      document.getElementById('s-km').textContent = d.summary.total_km ?? '—';
+      document.getElementById('s-speed').textContent = d.summary.avg_speed_kmh ?? '—';
+      document.getElementById('s-elev').textContent = d.summary.elevation_m ?? '—';
+      pctBadge(d.summary.km_vs_prev_week_pct, 'badge-km');
+      pctBadge(d.summary.speed_vs_prev_week_pct, 'badge-speed');
+      pctBadge(d.summary.elevation_vs_prev_week_pct, 'badge-elev');
+      renderSparkline('spark-km', d.summary.sparklines.km, '#abd600');
+      renderSparkline('spark-speed', d.summary.sparklines.speed_eas, '#abd600');
+      renderSparkline('spark-elev', d.summary.sparklines.elevation, '#abd600');
+
+      // Activities
+      const feed = document.getElementById('activity-feed');
+      feed.innerHTML = d.activities.length
+        ? d.activities.map(activityCard).join('')
+        : '<p class="text-muted text-sm">Keine Aktivitäten gefunden.</p>';
+
+      // Trends
+      renderSparkline('trend-speed', d.trends.speed_eas, '#abd600');
+      renderSparkline('trend-km', d.trends.volume_km, '#f18400');
+
+      // Trend badges: compare last vs first non-null
+      function trendBadge(series, elId, color) {
+        const vals = series.filter(v => v !== null);
+        if (vals.length < 2) { document.getElementById(elId).textContent=''; return; }
+        const pct = Math.round((vals[vals.length-1] - vals[0]) / vals[0] * 100);
+        const el = document.getElementById(elId);
+        const arrow = pct >= 0 ? '↑' : '↓';
+        el.textContent = `${arrow} ${Math.abs(pct)}%`;
+        el.className = `text-xs font-semibold ${color}`;
+      }
+      trendBadge(d.trends.speed_eas, 'trend-speed-badge', 'text-lime');
+      trendBadge(d.trends.volume_km, 'trend-km-badge', 'text-orange');
+    }
+
+    document.getElementById('sport').addEventListener('change', load);
+    document.getElementById('weeks').addEventListener('change', load);
+    load();
+  </script>
+</body>
+</html>"""
 
 
 if __name__ == "__main__":
