@@ -13,6 +13,25 @@ def db():
     conn.close()
 
 @pytest.fixture
+def db_with_many_activities(db):
+    """10 GravelRide activities across multiple weeks for percentile grading tests."""
+    rides = [
+        {"id": i, "name": f"Ride {i}", "sport_type": "GravelRide",
+         "start_date": f"2026-04-{14+i:02d}T10:00:00Z",
+         "start_date_local": f"2026-04-{14+i:02d}T12:00:00",
+         "distance": (20000 + i * 6000),
+         "moving_time": 3600 + i * 500,
+         "total_elevation_gain": 100 + i * 30,
+         "average_speed": 5.5 + i * 0.1,
+         "max_speed": 15.0, "average_heartrate": None, "kilojoules": 500 + i * 80}
+        for i in range(10)
+    ]
+    for r in rides:
+        upsert_activity(db, r)
+    return db
+
+
+@pytest.fixture
 def db_with_activities(db):
     """DB with 3 sample activities across 2 ISO weeks."""
     activities = [
