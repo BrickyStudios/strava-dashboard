@@ -11,6 +11,8 @@ from fastapi.responses import HTMLResponse
 
 from lib.db import get_conn, init_db, get_activities
 from lib.grade import compute_grade
+from lib.ai_coach import generate_detail_comment, _get_api_key
+import anthropic as _anthropic
 
 app = FastAPI()
 
@@ -215,6 +217,40 @@ def api_activity_detail(activity_id: int):
         "ai_comment": r.get("ai_comment"),
         "summary_polyline": (raw.get("map") or {}).get("summary_polyline"),
     }
+
+
+@app.get("/api/activity/{activity_id}/detail-comment")
+def api_activity_detail_comment(activity_id: int):
+    conn = get_conn()
+    init_db(conn)
+    row = conn.execute(
+        "SELECT * FROM activities WHERE id = ?", (activity_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    r = dict(row)
+    raw = json.loads(r.get("raw_json") or "{}")
+
+    sport = r.get("sport_type")
+    peers = [dict(a) for a in get_activities(conn, sport_type=sport)]
+    grade = compute_grade(r, peers)
+
+    activity_for_comment = {
+        **r,
+        "elev_high_m": raw.get("elev_high"),
+        "elev_low_m": raw.get("elev_low"),
+        "avg_watts": raw.get("average_watts"),
+        "pr_count": raw.get("pr_count") or 0,
+    }
+
+    api_key = _get_api_key()
+    if not api_key:
+        return {"comment": None, "error": "ANTHROPIC_API_KEY not configured"}
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    comment = generate_detail_comment(activity_for_comment, grade, client)
+    return {"comment": comment}
 
 
 @app.get("/", response_class=HTMLResponse)

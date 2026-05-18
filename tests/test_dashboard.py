@@ -103,3 +103,16 @@ def test_activity_detail_grade_is_valid(db_with_many_activities):
         client = TestClient(dashboard.app)
         resp = client.get("/api/activity/3")
     assert resp.json()["grade"] in ("A+", "A", "B+", "B", "C")
+
+
+def test_activity_detail_comment_returns_json(db_with_many_activities):
+    from unittest.mock import MagicMock
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value.content = [MagicMock(text="Klasse Fahrt!")]
+    with patch("dashboard.get_conn", return_value=db_with_many_activities), \
+         patch("dashboard._get_api_key", return_value="test-key"), \
+         patch("dashboard._anthropic.Anthropic", return_value=mock_client):
+        client = TestClient(dashboard.app)
+        resp = client.get("/api/activity/5/detail-comment")
+    assert resp.status_code == 200
+    assert "comment" in resp.json()

@@ -13,6 +13,7 @@ from lib.db import get_activities
 ENV_PATH = Path(__file__).parent.parent / ".env"
 MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 80
+MAX_TOKENS_DETAIL = 250
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,53 @@ def generate_comment(activity: dict, grade: str, client: anthropic.Anthropic) ->
         return response.content[0].text.strip()
     except Exception as e:
         logger.warning("AI comment generation failed for activity %s: %s", activity.get("id"), e)
+        return None
+
+
+def generate_detail_comment(activity: dict, grade: str, client: anthropic.Anthropic) -> str | None:
+    dist_km = (activity.get("distance_m") or 0) / 1000
+    duration_min = (activity.get("moving_time_s") or 0) / 60
+    speed_kmh = (activity.get("avg_speed_ms") or 0) * 3.6
+    max_speed_kmh = (activity.get("max_speed_ms") or 0) * 3.6
+    elev = activity.get("elevation_gain_m") or 0
+    elev_high = activity.get("elev_high_m")
+    elev_low = activity.get("elev_low_m")
+    watts = activity.get("avg_watts")
+    heartrate = activity.get("avg_heartrate")
+    pr_count = activity.get("pr_count") or 0
+
+    lines = [
+        f"Du bist ein erfahrener Trainer. Analysiere diese Einheit in 3–4 Sätzen auf Deutsch (Du-Form). "
+        f"Gib eine konkrete Einordnung: Was lief gut? Was könnte besser sein? Gibt es einen Trainingshinweis?\n",
+        f"Sport: {activity.get('sport_type', 'Unbekannt')}",
+        f"Name: {activity.get('name', '')}",
+        f"Note: {grade}",
+        f"Distanz: {dist_km:.1f} km",
+        f"Dauer: {duration_min:.0f} min",
+        f"Ø Tempo: {speed_kmh:.1f} km/h  |  Max: {max_speed_kmh:.1f} km/h",
+        f"Höhenmeter: {elev:.0f} m",
+    ]
+    if elev_high is not None and elev_low is not None:
+        lines.append(f"Höhenprofil: {elev_low:.0f}–{elev_high:.0f} m ü.NN")
+    if heartrate:
+        lines.append(f"Ø Herzfrequenz: {heartrate:.0f} bpm")
+    if watts:
+        lines.append(f"Ø Leistung: {watts:.0f} W  |  {(watts * duration_min * 60 / 1000):.0f} kJ")
+    if pr_count:
+        lines.append(f"Strava-PRs: {pr_count}")
+    lines.append("\nNur die Analyse, keine Einleitung.")
+
+    prompt = "\n".join(lines)
+
+    try:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS_DETAIL,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        logger.warning("Detail comment generation failed for activity %s: %s", activity.get("id"), e)
         return None
 
 

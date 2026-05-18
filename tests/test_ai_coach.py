@@ -89,3 +89,33 @@ def test_generate_missing_comments_skips_on_none_response(db):
         generate_missing_comments(db)
     row = db.execute("SELECT ai_comment FROM activities WHERE id = 1").fetchone()
     assert row[0] is None  # still NULL, not written
+
+
+def test_generate_detail_comment_returns_string():
+    from lib.ai_coach import generate_detail_comment
+    row = {
+        "id": 1, "name": "Seen Runde", "sport_type": "GravelRide",
+        "distance_m": 75300.0, "moving_time_s": 11580,
+        "elevation_gain_m": 417.0, "avg_speed_ms": 6.503,
+        "max_speed_ms": 18.0, "avg_heartrate": None,
+        "kilojoules": 1376.0, "elev_high_m": 182.0, "elev_low_m": 73.0,
+        "avg_watts": None, "pr_count": 0,
+    }
+    client = _mock_client("Hervorragende Fahrt! Du hast eine exzellente Pace gehalten.")
+    result = generate_detail_comment(row, "A+", client)
+    assert isinstance(result, str)
+    assert len(result) > 10
+
+
+def test_generate_detail_comment_returns_none_on_error():
+    from lib.ai_coach import generate_detail_comment
+    row = {"id": 1, "name": "Test", "sport_type": "GravelRide",
+           "distance_m": 40000, "moving_time_s": 6000,
+           "elevation_gain_m": 200, "avg_speed_ms": 6.5,
+           "max_speed_ms": 15.0, "avg_heartrate": None,
+           "kilojoules": 500, "elev_high_m": None, "elev_low_m": None,
+           "avg_watts": None, "pr_count": 0}
+    client = _mock_client()
+    client.messages.create.side_effect = Exception("fail")
+    result = generate_detail_comment(row, "B", client)
+    assert result is None
