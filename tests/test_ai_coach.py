@@ -43,8 +43,8 @@ def test_generate_comment_returns_string():
     row["moving_time_s"] = row.pop("moving_time")
     row["elevation_gain_m"] = row.pop("total_elevation_gain")
     row["avg_speed_ms"] = row.pop("average_speed")
-    with patch("lib.ai_coach.anthropic.Anthropic", return_value=_mock_client()):
-        result = generate_comment(row, "A+")
+    client = _mock_client()
+    result = generate_comment(row, "A+", client)
     assert isinstance(result, str)
     assert len(result) > 5
 
@@ -54,15 +54,17 @@ def test_generate_comment_returns_none_on_api_error():
     row = {"id": 1, "name": "Test", "sport_type": "GravelRide",
            "distance_m": 40000, "moving_time_s": 6000,
            "elevation_gain_m": 200, "avg_speed_ms": 6.5}
-    with patch("lib.ai_coach.anthropic.Anthropic") as MockClient:
-        MockClient.return_value.messages.create.side_effect = Exception("API error")
-        result = generate_comment(row, "B")
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = Exception("API error")
+    result = generate_comment(row, "B", mock_client)
     assert result is None
 
 
 def test_generate_missing_comments_fills_nulls(db):
     from lib.ai_coach import generate_missing_comments
-    with patch("lib.ai_coach.generate_comment", return_value="Starke Leistung!"):
+    with patch("lib.ai_coach._get_api_key", return_value="test-key"), \
+         patch("lib.ai_coach.anthropic.Anthropic", return_value=_mock_client()), \
+         patch("lib.ai_coach.generate_comment", return_value="Starke Leistung!"):
         generate_missing_comments(db)
     row = db.execute("SELECT ai_comment FROM activities WHERE id = 1").fetchone()
     assert row[0] == "Starke Leistung!"
@@ -72,14 +74,18 @@ def test_generate_missing_comments_skips_existing(db):
     db.execute("UPDATE activities SET ai_comment = 'Already set' WHERE id = 1")
     db.commit()
     from lib.ai_coach import generate_missing_comments
-    with patch("lib.ai_coach.generate_comment") as mock_gen:
+    with patch("lib.ai_coach._get_api_key", return_value="test-key"), \
+         patch("lib.ai_coach.anthropic.Anthropic", return_value=_mock_client()), \
+         patch("lib.ai_coach.generate_comment") as mock_gen:
         generate_missing_comments(db)
     mock_gen.assert_not_called()
 
 
 def test_generate_missing_comments_skips_on_none_response(db):
     from lib.ai_coach import generate_missing_comments
-    with patch("lib.ai_coach.generate_comment", return_value=None):
+    with patch("lib.ai_coach._get_api_key", return_value="test-key"), \
+         patch("lib.ai_coach.anthropic.Anthropic", return_value=_mock_client()), \
+         patch("lib.ai_coach.generate_comment", return_value=None):
         generate_missing_comments(db)
     row = db.execute("SELECT ai_comment FROM activities WHERE id = 1").fetchone()
     assert row[0] is None  # still NULL, not written
