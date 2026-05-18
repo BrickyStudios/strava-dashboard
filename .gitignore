@@ -226,3 +226,6 @@ Temporary Items
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+# Superpowers internal tooling
+.superpowers/
