@@ -10,6 +10,7 @@ from pathlib import Path
 from dotenv import dotenv_values, set_key
 
 from lib.db import get_conn, init_db, upsert_activity, get_sync_state, set_sync_state
+from lib.ai_coach import generate_missing_comments
 
 ENV_PATH = Path(__file__).parent / ".env"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
@@ -112,6 +113,10 @@ def main():
     total_count = conn.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
     set_sync_state(conn, epoch=int(datetime.now(timezone.utc).timestamp()), count=total_count)
     print(f"Sync complete. {synced} new activities. {total_count} total in DB.")
+
+    print("Generating AI coaching comments for new activities...")
+    generate_missing_comments(conn)
+    print("Done.")
 
 
 if __name__ == "__main__":

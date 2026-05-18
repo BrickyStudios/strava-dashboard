@@ -92,3 +92,36 @@ def test_sync_upserts_activities_into_db(db):
     rows = get_activities(db)
     assert len(rows) == 1
     assert rows[0]["id"] == 42
+
+
+def test_sync_calls_generate_missing_comments(tmp_path):
+    """After a successful sync, generate_missing_comments is called."""
+    from sync import main
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "STRAVA_CLIENT_ID=1\nSTRAVA_CLIENT_SECRET=s\n"
+        "STRAVA_ACCESS_TOKEN=t\nSTRAVA_REFRESH_TOKEN=r\n"
+    )
+    mock_resp = MagicMock()
+    mock_resp.json.side_effect = [
+        [{"id": 99, "name": "Test", "sport_type": "GravelRide",
+          "start_date": "2026-05-01T10:00:00Z", "start_date_local": "2026-05-01T12:00:00",
+          "distance": 40000.0, "moving_time": 6000, "total_elevation_gain": 200.0,
+          "average_speed": 6.5, "max_speed": 15.0, "kilojoules": 700.0}],
+        [],  # second page → empty → stop
+    ]
+    mock_resp.headers = {"X-RateLimit-Limit": "100,1000", "X-RateLimit-Usage": "1,1"}
+    mock_resp.raise_for_status.return_value = None
+
+    mock_token_resp = MagicMock()
+    mock_token_resp.json.return_value = {"access_token": "new", "refresh_token": "new_r"}
+    mock_token_resp.raise_for_status.return_value = None
+
+    with patch("sys.argv", ["sync.py"]), \
+         patch("httpx.post", return_value=mock_token_resp), \
+         patch("httpx.get", return_value=mock_resp), \
+         patch("sync.ENV_PATH", env_file), \
+         patch("sync.generate_missing_comments") as mock_gen_comments:
+        main()
+
+    mock_gen_comments.assert_called_once()
