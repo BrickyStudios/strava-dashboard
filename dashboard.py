@@ -1,11 +1,12 @@
 """Local performance dashboard — FastAPI + Tailwind at localhost:8080."""
 
+import json
 import webbrowser
 from datetime import date, timedelta
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
 from lib.db import get_conn, init_db, get_activities
@@ -159,6 +160,60 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
             "speed_eas": speed_eas_series,
             "volume_km": volume_km_series,
         },
+    }
+
+
+@app.get("/api/activity/{activity_id}")
+def api_activity_detail(activity_id: int):
+    conn = get_conn()
+    init_db(conn)
+    row = conn.execute(
+        "SELECT * FROM activities WHERE id = ?", (activity_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    r = dict(row)
+    raw = json.loads(r.get("raw_json") or "{}")
+
+    # Compute grade against same-sport peers
+    sport = r.get("sport_type")
+    peers = [dict(a) for a in get_activities(conn, sport_type=sport)]
+    grade = compute_grade(r, peers)
+
+    start = (r.get("start_date_local") or "")[:10]
+    try:
+        d = date.fromisoformat(start)
+        date_str = f"{d.day:02d}.{d.month:02d}."
+    except Exception:
+        date_str = start
+
+    avg_watts = raw.get("average_watts")
+    max_spd_ms = r.get("max_speed_ms") or 0
+
+    return {
+        "id": r["id"],
+        "name": r.get("name") or "",
+        "sport_type": r.get("sport_type") or "",
+        "date": date_str,
+        "start_date_local": r.get("start_date_local") or "",
+        "distance_km": round((r.get("distance_m") or 0) / 1000, 1),
+        "duration_min": round((r.get("moving_time_s") or 0) / 60),
+        "elapsed_min": round((raw.get("elapsed_time") or r.get("moving_time_s") or 0) / 60),
+        "avg_speed_kmh": round((r.get("avg_speed_ms") or 0) * 3.6, 1),
+        "eas_kmh": round(_eas_kmh(r), 1),
+        "max_speed_kmh": round(max_spd_ms * 3.6, 1),
+        "elevation_gain_m": round(r["elevation_gain_m"]) if r.get("elevation_gain_m") is not None else None,
+        "elev_high_m": raw.get("elev_high"),
+        "elev_low_m": raw.get("elev_low"),
+        "avg_heartrate": r.get("avg_heartrate"),
+        "max_heartrate": raw.get("max_heartrate"),
+        "avg_watts": round(avg_watts) if avg_watts else None,
+        "kilojoules": round(r["kilojoules"]) if r.get("kilojoules") is not None else None,
+        "pr_count": raw.get("pr_count") or 0,
+        "grade": grade,
+        "ai_comment": r.get("ai_comment"),
+        "summary_polyline": (raw.get("map") or {}).get("summary_polyline"),
     }
 
 

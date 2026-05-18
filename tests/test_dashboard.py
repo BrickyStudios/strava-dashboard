@@ -75,3 +75,31 @@ def test_api_sport_filter(db_with_many_activities):
     # No Run activities in fixture → activities list empty, summary zeros
     data = resp.json()
     assert data["activities"] == []
+
+
+def test_activity_detail_returns_404_for_unknown(db_with_many_activities):
+    with patch("dashboard.get_conn", return_value=db_with_many_activities):
+        client = TestClient(dashboard.app)
+        resp = client.get("/api/activity/9999")
+    assert resp.status_code == 404
+
+
+def test_activity_detail_shape(db_with_many_activities):
+    with patch("dashboard.get_conn", return_value=db_with_many_activities):
+        client = TestClient(dashboard.app)
+        resp = client.get("/api/activity/5")
+    assert resp.status_code == 200
+    d = resp.json()
+    for field in ("id", "name", "sport_type", "date", "distance_km", "duration_min",
+                  "elapsed_min", "avg_speed_kmh", "eas_kmh", "max_speed_kmh",
+                  "elevation_gain_m", "elev_high_m", "elev_low_m",
+                  "avg_heartrate", "avg_watts", "kilojoules", "pr_count",
+                  "grade", "ai_comment", "summary_polyline"):
+        assert field in d, f"Missing field: {field}"
+
+
+def test_activity_detail_grade_is_valid(db_with_many_activities):
+    with patch("dashboard.get_conn", return_value=db_with_many_activities):
+        client = TestClient(dashboard.app)
+        resp = client.get("/api/activity/3")
+    assert resp.json()["grade"] in ("A+", "A", "B+", "B", "C")
