@@ -426,7 +426,23 @@ def _dashboard_html() -> str:
     </div>
   </header>
 
+  <!-- Tab bar -->
+  <nav class="border-b border-border px-4">
+    <div class="max-w-3xl mx-auto flex">
+      <button id="tab-dashboard" onclick="switchTab('dashboard')"
+        class="px-4 py-3 text-sm font-semibold border-b-2 border-lime text-lime transition-colors">
+        Dashboard
+      </button>
+      <button id="tab-segmente" onclick="switchTab('segmente')"
+        class="px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-muted hover:text-on-surface transition-colors">
+        Segmente
+      </button>
+    </div>
+  </nav>
+
   <main class="max-w-3xl mx-auto px-4 py-6 space-y-8">
+
+    <div id="view-dashboard">
 
     <!-- Weekly Summary -->
     <section>
@@ -491,6 +507,21 @@ def _dashboard_html() -> str:
         </div>
       </div>
     </section>
+
+    </div><!-- /view-dashboard -->
+
+    <!-- Segments Tab -->
+    <div id="view-segmente" class="hidden space-y-6">
+      <section>
+        <h2 class="text-base font-semibold text-on-surface mb-3">Meine Rekorde</h2>
+        <div id="seg-koms"><p class="text-sm text-muted">Wird geladen…</p></div>
+      </section>
+      <section>
+        <h2 class="text-base font-semibold text-on-surface mb-3">Rekord-Chancen</h2>
+        <p class="text-xs text-muted mb-3">Segmente wo du auf Platz 2–3 bist oder schneller wirst.</p>
+        <div id="seg-opps"><p class="text-sm text-muted">Wird geladen…</p></div>
+      </section>
+    </div>
 
   </main>
 
@@ -718,6 +749,80 @@ def _dashboard_html() -> str:
       panel.classList.add('translate-x-full');
       overlay.classList.add('hidden');
       if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
+    }
+
+    function fmtTime(s) {
+      if (s == null) return '—';
+      const m = Math.floor(s / 60), sec = s % 60;
+      return `${m}:${String(sec).padStart(2, '0')}`;
+    }
+
+    function fmtDist(m) {
+      return m != null ? (m / 1000).toFixed(1) + ' km' : '—';
+    }
+
+    function segTable(rows, cols) {
+      if (!rows.length) return '<p class="text-sm text-muted">Keine Daten.</p>';
+      const head = cols.map(c =>
+        `<th class="text-left text-xs font-bold uppercase tracking-wider text-muted px-3 py-2">${c.label}</th>`
+      ).join('');
+      const body = rows.map(r =>
+        `<tr class="border-t border-border hover:bg-surface-high transition-colors">
+          ${cols.map(c => `<td class="px-3 py-2 text-sm text-on-surface">${c.render(r)}</td>`).join('')}
+        </tr>`
+      ).join('');
+      return `<table class="w-full bg-surface-low border border-border rounded-lg overflow-hidden">
+        <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    let _segLoaded = false;
+
+    async function loadSegments() {
+      if (_segLoaded) return;
+      _segLoaded = true;
+      try {
+        const r = await fetch('/api/segments');
+        const d = await r.json();
+
+        if (!d.koms.length && !d.opportunities.length) {
+          document.getElementById('seg-koms').innerHTML =
+            '<p class="text-sm text-muted">Keine Segment-Daten. Starte <code class="bg-surface px-1 rounded">uv run sync.py</code> um Daten zu laden.</p>';
+          document.getElementById('seg-opps').innerHTML = '';
+          return;
+        }
+
+        document.getElementById('seg-koms').innerHTML = segTable(d.koms, [
+          { label: 'Segment',    render: r => escapeHtml(r.segment_name) },
+          { label: 'Distanz',    render: r => fmtDist(r.distance_m) },
+          { label: 'Beste Zeit', render: r => fmtTime(r.elapsed_time_s) },
+          { label: 'Datum',      render: r => escapeHtml(r.activity_date || '—') },
+        ]);
+
+        document.getElementById('seg-opps').innerHTML = segTable(d.opportunities, [
+          { label: 'Segment',    render: r => escapeHtml(r.segment_name) },
+          { label: 'Distanz',    render: r => fmtDist(r.distance_m) },
+          { label: 'Meine Zeit', render: r => fmtTime(r.elapsed_time_s) },
+          { label: 'Platz',      render: r => r.overall_rank ? `#${r.overall_rank}` : '—' },
+          { label: 'Trend',      render: r => r.is_trending
+              ? `<span class="text-lime font-semibold">↑ ${Math.abs(r.trend_pct)}%</span>`
+              : '<span class="text-muted">—</span>' },
+        ]);
+      } catch (e) {
+        console.error('Segment load error:', e);
+      }
+    }
+
+    function switchTab(tab) {
+      const isDash = tab === 'dashboard';
+      document.getElementById('view-dashboard').classList.toggle('hidden', !isDash);
+      document.getElementById('view-segmente').classList.toggle('hidden', isDash);
+      const active = 'border-lime text-lime';
+      const inactive = 'border-transparent text-muted hover:text-on-surface';
+      document.getElementById('tab-dashboard').className =
+        `px-4 py-3 text-sm font-semibold border-b-2 ${isDash ? active : inactive} transition-colors`;
+      document.getElementById('tab-segmente').className =
+        `px-4 py-3 text-sm font-semibold border-b-2 ${isDash ? inactive : active} transition-colors`;
+      if (!isDash) loadSegments();
     }
   </script>
 
