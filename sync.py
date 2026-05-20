@@ -121,6 +121,10 @@ def sync_segment_efforts(conn: sqlite3.Connection, access_token: str) -> None:
             f"https://www.strava.com/api/v3/activities/{activity_id}?include_all_efforts=true",
             headers={"Authorization": f"Bearer {access_token}"},
         )
+        if resp.status_code == 404:
+            print(f"  Activity {activity_id}: not found on Strava, skipping")
+            upsert_segment_efforts(conn, activity_id, [])
+            continue
         resp.raise_for_status()
         check_rate_limit(resp.headers)
         detail = resp.json()
