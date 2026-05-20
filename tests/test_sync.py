@@ -121,7 +121,58 @@ def test_sync_calls_generate_missing_comments(tmp_path):
          patch("httpx.post", return_value=mock_token_resp), \
          patch("httpx.get", return_value=mock_resp), \
          patch("sync.ENV_PATH", env_file), \
-         patch("sync.generate_missing_comments") as mock_gen_comments:
+         patch("sync.generate_missing_comments") as mock_gen_comments, \
+         patch("sync.sync_segment_efforts"):
         main()
 
     mock_gen_comments.assert_called_once()
+
+
+# --- parse_segment_effort tests ---
+
+def test_parse_segment_effort_with_kom():
+    from sync import parse_segment_effort
+    raw = {
+        "elapsed_time": 54,
+        "start_date_local": "2026-05-19T10:30:00Z",
+        "pr_rank": 1,
+        "segment": {"id": 999, "name": "Bergkuppe Sprint", "distance": 420.5},
+        "achievements": [{"type": "overall", "type_id": 2, "rank": 1}],
+    }
+    result = parse_segment_effort(raw)
+    assert result["segment_id"] == 999
+    assert result["segment_name"] == "Bergkuppe Sprint"
+    assert result["segment_distance_m"] == 420.5
+    assert result["elapsed_time_s"] == 54
+    assert result["overall_rank"] == 1
+    assert result["pr_rank"] == 1
+
+
+def test_parse_segment_effort_no_achievement():
+    from sync import parse_segment_effort
+    raw = {
+        "elapsed_time": 120,
+        "start_date_local": "2026-05-01T09:00:00Z",
+        "pr_rank": None,
+        "segment": {"id": 777, "name": "Flat Road", "distance": 1000.0},
+        "achievements": [],
+    }
+    result = parse_segment_effort(raw)
+    assert result["segment_id"] == 777
+    assert result["overall_rank"] is None
+
+
+def test_parse_segment_effort_rank2_skips_non_overall():
+    from sync import parse_segment_effort
+    raw = {
+        "elapsed_time": 198,
+        "start_date_local": "2026-05-10T08:00:00Z",
+        "pr_rank": 1,
+        "segment": {"id": 888, "name": "Waldweg Abfahrt", "distance": 1200.0},
+        "achievements": [
+            {"type": "year_overall", "type_id": 3, "rank": 1},
+            {"type": "overall", "type_id": 2, "rank": 2},
+        ],
+    }
+    result = parse_segment_effort(raw)
+    assert result["overall_rank"] == 2

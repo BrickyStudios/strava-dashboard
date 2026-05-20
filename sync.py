@@ -9,7 +9,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values, set_key
 
-from lib.db import get_conn, init_db, upsert_activity, get_sync_state, set_sync_state
+from lib.db import get_conn, init_db, upsert_activity, get_sync_state, set_sync_state, upsert_segment_efforts
 from lib.ai_coach import generate_missing_comments
 
 ENV_PATH = Path(__file__).parent / ".env"
@@ -85,6 +85,51 @@ def run_sync(conn: sqlite3.Connection, full: bool, last_epoch: int, access_token
     return total
 
 
+def parse_segment_effort(effort: dict) -> dict:
+    seg = effort.get("segment") or {}
+    overall_rank = None
+    for a in effort.get("achievements") or []:
+        if a.get("type") == "overall":
+            overall_rank = a.get("rank")
+            break
+    return {
+        "segment_id": seg.get("id"),
+        "segment_name": seg.get("name"),
+        "segment_distance_m": seg.get("distance"),
+        "elapsed_time_s": effort.get("elapsed_time"),
+        "start_date_local": effort.get("start_date_local"),
+        "pr_rank": effort.get("pr_rank"),
+        "overall_rank": overall_rank,
+    }
+
+
+def sync_segment_efforts(conn: sqlite3.Connection, access_token: str) -> None:
+    rows = conn.execute("""
+        SELECT id FROM activities
+        WHERE id NOT IN (SELECT DISTINCT activity_id FROM segment_efforts)
+        ORDER BY start_date_local DESC
+    """).fetchall()
+
+    if not rows:
+        print("All activities already have segment data.")
+        return
+
+    print(f"Fetching segment efforts for {len(rows)} activities...")
+    for row in rows:
+        activity_id = row[0]
+        resp = httpx.get(
+            f"https://www.strava.com/api/v3/activities/{activity_id}?include_all_efforts=true",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        resp.raise_for_status()
+        check_rate_limit(resp.headers)
+        detail = resp.json()
+        raw_efforts = detail.get("segment_efforts") or []
+        parsed = [parse_segment_effort(e) for e in raw_efforts]
+        upsert_segment_efforts(conn, activity_id, parsed)
+        print(f"  Activity {activity_id}: {len(parsed)} segment efforts stored")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Sync Strava activities to SQLite")
     parser.add_argument("--full", action="store_true", help="Re-fetch all activities")
@@ -116,6 +161,9 @@ def main():
 
     print("Generating AI coaching comments for new activities...")
     generate_missing_comments(conn)
+
+    print("Syncing segment efforts...")
+    sync_segment_efforts(conn, access_token)
     print("Done.")
 
 
