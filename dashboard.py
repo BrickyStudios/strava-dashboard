@@ -9,7 +9,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
-from lib.db import get_conn, init_db, get_activities
+from lib.db import get_conn, init_db, get_activities, get_koms, get_all_ranked_efforts
 from lib.grade import compute_grade
 from lib.ai_coach import generate_detail_comment, _get_api_key
 import anthropic as _anthropic
@@ -230,6 +230,11 @@ def api_activity_detail_comment(activity_id: int):
         raise HTTPException(status_code=404, detail="Activity not found")
 
     r = dict(row)
+
+    # Return cached comment if available
+    if r.get("detail_comment"):
+        return {"comment": r["detail_comment"]}
+
     raw = json.loads(r.get("raw_json") or "{}")
 
     sport = r.get("sport_type")
@@ -250,7 +255,88 @@ def api_activity_detail_comment(activity_id: int):
 
     client = _anthropic.Anthropic(api_key=api_key)
     comment = generate_detail_comment(activity_for_comment, grade, client)
+    if comment:
+        conn.execute("UPDATE activities SET detail_comment = ? WHERE id = ?", (comment, activity_id))
+        conn.commit()
     return {"comment": comment}
+
+
+@app.get("/api/segments")
+def api_segments():
+    conn = get_conn()
+    init_db(conn)
+
+    koms_raw = get_koms(conn)
+    kom_ids = {r["segment_id"] for r in koms_raw}
+    all_efforts = get_all_ranked_efforts(conn)
+
+    by_seg: dict[int, dict] = {}
+    for e in all_efforts:
+        sid = e["segment_id"]
+        if sid not in by_seg:
+            by_seg[sid] = {
+                "name": e["segment_name"],
+                "distance_m": e["segment_distance_m"],
+                "times": [],
+                "ranks": [],
+            }
+        if e["elapsed_time_s"] is not None:
+            by_seg[sid]["times"].append(e["elapsed_time_s"])
+        if e["overall_rank"] is not None:
+            by_seg[sid]["ranks"].append(e["overall_rank"])
+
+    def _trend_pct(times: list[int]) -> float | None:
+        if len(times) < 2:
+            return None
+        half = len(times) // 2
+        first_avg = sum(times[:half]) / half
+        last_avg = sum(times[half:]) / (len(times) - half)
+        if first_avg == 0:
+            return None
+        return round((last_avg - first_avg) / first_avg * 100, 1)
+
+    def _fmt_date(iso: str) -> str:
+        try:
+            d = date.fromisoformat(iso[:10])
+            return f"{d.day:02d}.{d.month:02d}."
+        except Exception:
+            return iso[:10]
+
+    koms = [
+        {
+            "segment_id": r["segment_id"],
+            "segment_name": r["segment_name"],
+            "distance_m": r["segment_distance_m"],
+            "elapsed_time_s": r["elapsed_time_s"],
+            "activity_date": _fmt_date(r["activity_date"] or ""),
+            "overall_rank": 1,
+        }
+        for r in koms_raw
+    ]
+
+    opportunities = []
+    for sid, data in by_seg.items():
+        if sid in kom_ids:
+            continue
+        times = data["times"]
+        min_rank = min(data["ranks"]) if data["ranks"] else None
+        trend_pct = _trend_pct(times)
+        is_near = min_rank in (2, 3)
+        is_trending = trend_pct is not None and trend_pct < -3.0
+
+        if is_near or is_trending:
+            opportunities.append({
+                "segment_id": sid,
+                "segment_name": data["name"],
+                "distance_m": data["distance_m"],
+                "elapsed_time_s": min(times) if times else None,
+                "overall_rank": min_rank,
+                "trend_pct": trend_pct,
+                "is_trending": is_trending,
+            })
+
+    opportunities.sort(key=lambda x: (x["overall_rank"] or 99, x["trend_pct"] or 0))
+    return {"koms": koms, "opportunities": opportunities}
 
 
 @app.get("/", response_class=HTMLResponse)
