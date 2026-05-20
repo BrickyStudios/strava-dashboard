@@ -39,13 +39,27 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
     """)
     conn.commit()  # explicit commit after DDL
-    # Safe migration for DBs created before ai_comment column existed
-    try:
-        conn.execute("ALTER TABLE activities ADD COLUMN ai_comment TEXT")
-        conn.commit()
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" not in str(e):
-            raise
+    for col in ("ai_comment TEXT", "detail_comment TEXT"):
+        try:
+            conn.execute(f"ALTER TABLE activities ADD COLUMN {col}")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS segment_efforts (
+            segment_id         INTEGER NOT NULL,
+            segment_name       TEXT,
+            segment_distance_m REAL,
+            activity_id        INTEGER NOT NULL,
+            elapsed_time_s     INTEGER,
+            start_date_local   TEXT,
+            pr_rank            INTEGER,
+            overall_rank       INTEGER,
+            PRIMARY KEY (segment_id, activity_id)
+        )
+    """)
+    conn.commit()
 
 
 def upsert_activity(conn: sqlite3.Connection, activity: dict) -> None:
@@ -105,3 +119,48 @@ def set_sync_state(conn: sqlite3.Connection, epoch: int, count: int) -> None:
         (epoch, count),
     )
     conn.commit()
+
+
+def upsert_segment_efforts(conn: sqlite3.Connection, activity_id: int, efforts: list[dict]) -> None:
+    if not efforts:
+        conn.execute(
+            """INSERT OR IGNORE INTO segment_efforts
+               (segment_id, segment_name, segment_distance_m, activity_id,
+                elapsed_time_s, start_date_local, pr_rank, overall_rank)
+               VALUES (0, NULL, NULL, ?, NULL, NULL, NULL, NULL)""",
+            (activity_id,),
+        )
+    else:
+        for e in efforts:
+            conn.execute(
+                """INSERT OR REPLACE INTO segment_efforts
+                   (segment_id, segment_name, segment_distance_m, activity_id,
+                    elapsed_time_s, start_date_local, pr_rank, overall_rank)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (e["segment_id"], e["segment_name"], e["segment_distance_m"],
+                 activity_id, e["elapsed_time_s"], e["start_date_local"],
+                 e.get("pr_rank"), e.get("overall_rank")),
+            )
+    conn.commit()
+
+
+def get_koms(conn: sqlite3.Connection) -> list:
+    return conn.execute("""
+        SELECT segment_id, segment_name, segment_distance_m,
+               MIN(elapsed_time_s) AS elapsed_time_s,
+               MAX(start_date_local) AS activity_date
+        FROM segment_efforts
+        WHERE overall_rank = 1 AND segment_id != 0
+        GROUP BY segment_id
+        ORDER BY segment_distance_m DESC
+    """).fetchall()
+
+
+def get_all_ranked_efforts(conn: sqlite3.Connection) -> list:
+    return conn.execute("""
+        SELECT segment_id, segment_name, segment_distance_m,
+               elapsed_time_s, overall_rank, start_date_local
+        FROM segment_efforts
+        WHERE segment_id != 0
+        ORDER BY segment_id, start_date_local ASC
+    """).fetchall()
