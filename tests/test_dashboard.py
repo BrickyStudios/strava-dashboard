@@ -141,17 +141,17 @@ def test_api_segments_shape(db):
          "pr_rank": 1, "overall_rank": 1},
         {"segment_id": 200, "segment_name": "2nd Seg", "segment_distance_m": 300.0,
          "elapsed_time_s": 45, "start_date_local": "2026-05-01T12:35:00",
-         "pr_rank": 1, "overall_rank": 2},
+         "pr_rank": None, "overall_rank": 2},
     ])
     with patch("dashboard.get_conn", return_value=db):
         client = TestClient(dashboard.app)
         resp = client.get("/api/segments")
     assert resp.status_code == 200
     data = resp.json()
-    assert "koms" in data
+    assert "records" in data
     assert "opportunities" in data
-    assert len(data["koms"]) == 1
-    assert data["koms"][0]["segment_id"] == 100
+    assert len(data["records"]) == 1
+    assert data["records"][0]["segment_id"] == 100
     assert len(data["opportunities"]) == 1
     assert data["opportunities"][0]["segment_id"] == 200
 
@@ -161,7 +161,7 @@ def test_api_segments_empty(db):
         client = TestClient(dashboard.app)
         resp = client.get("/api/segments")
     assert resp.status_code == 200
-    assert resp.json() == {"koms": [], "opportunities": []}
+    assert resp.json() == {"records": [], "opportunities": []}
 
 
 def test_api_segments_trending_included(db):
@@ -171,12 +171,12 @@ def test_api_segments_trending_included(db):
     upsert_segment_efforts(db, activity_id=1, efforts=[
         {"segment_id": 300, "segment_name": "Trend Seg", "segment_distance_m": 800.0,
          "elapsed_time_s": 200, "start_date_local": "2026-05-01T12:30:00",
-         "pr_rank": 2, "overall_rank": None},
+         "pr_rank": 5, "overall_rank": None},
     ])
     upsert_segment_efforts(db, activity_id=2, efforts=[
         {"segment_id": 300, "segment_name": "Trend Seg", "segment_distance_m": 800.0,
          "elapsed_time_s": 180, "start_date_local": "2026-05-08T12:30:00",
-         "pr_rank": 1, "overall_rank": None},
+         "pr_rank": 4, "overall_rank": None},
     ])
     with patch("dashboard.get_conn", return_value=db):
         client = TestClient(dashboard.app)

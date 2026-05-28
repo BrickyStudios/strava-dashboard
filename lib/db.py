@@ -39,7 +39,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
     """)
     conn.commit()  # explicit commit after DDL
-    for col in ("ai_comment TEXT", "detail_comment TEXT"):
+    for col in ("ai_comment TEXT", "detail_comment TEXT", "surface_json TEXT"):
         try:
             conn.execute(f"ALTER TABLE activities ADD COLUMN {col}")
             conn.commit()
@@ -144,22 +144,24 @@ def upsert_segment_efforts(conn: sqlite3.Connection, activity_id: int, efforts: 
     conn.commit()
 
 
-def get_koms(conn: sqlite3.Connection) -> list:
+def get_my_records(conn: sqlite3.Connection) -> list:
+    """Segments where user holds overall rank 1 (KOM) or personal record (pr_rank=1)."""
     return conn.execute("""
         SELECT segment_id, segment_name, segment_distance_m,
                MIN(elapsed_time_s) AS elapsed_time_s,
-               MAX(start_date_local) AS activity_date
+               MAX(start_date_local) AS activity_date,
+               MIN(overall_rank) AS overall_rank
         FROM segment_efforts
-        WHERE overall_rank = 1 AND segment_id != 0
+        WHERE (overall_rank = 1 OR pr_rank = 1) AND segment_id != 0
         GROUP BY segment_id
-        ORDER BY segment_distance_m DESC
+        ORDER BY overall_rank ASC NULLS LAST, segment_distance_m DESC
     """).fetchall()
 
 
 def get_all_ranked_efforts(conn: sqlite3.Connection) -> list:
     return conn.execute("""
         SELECT segment_id, segment_name, segment_distance_m,
-               elapsed_time_s, overall_rank, start_date_local
+               elapsed_time_s, overall_rank, pr_rank, start_date_local
         FROM segment_efforts
         WHERE segment_id != 0
         ORDER BY segment_id, start_date_local ASC

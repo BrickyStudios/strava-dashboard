@@ -5,11 +5,13 @@ import webbrowser
 from datetime import date, timedelta
 from typing import Optional
 
+from lib.surfaces import analyze_surfaces
+
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
-from lib.db import get_conn, init_db, get_activities, get_koms, get_all_ranked_efforts
+from lib.db import get_conn, init_db, get_activities, get_my_records, get_all_ranked_efforts
 from lib.grade import compute_grade
 from lib.ai_coach import generate_detail_comment, _get_api_key
 import anthropic as _anthropic
@@ -165,6 +167,29 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
     }
 
 
+def _surface_data(r: dict, raw: dict) -> dict | None:
+    surface_raw = r.get("surface_json")
+    if surface_raw:
+        data = json.loads(surface_raw)
+        if data.get("no_route"):
+            return None
+        return data
+    # Not yet analyzed — compute on-the-fly and cache
+    polyline = (raw.get("map") or {}).get("summary_polyline")
+    if not polyline:
+        return None
+    result = analyze_surfaces(polyline)
+    if result and not result.get("no_route"):
+        conn = get_conn()
+        conn.execute(
+            "UPDATE activities SET surface_json = ? WHERE id = ?",
+            (json.dumps(result), r["id"]),
+        )
+        conn.commit()
+        return result
+    return None
+
+
 @app.get("/api/activity/{activity_id}")
 def api_activity_detail(activity_id: int):
     conn = get_conn()
@@ -216,6 +241,7 @@ def api_activity_detail(activity_id: int):
         "grade": grade,
         "ai_comment": r.get("ai_comment"),
         "summary_polyline": (raw.get("map") or {}).get("summary_polyline"),
+        "surface": _surface_data(r, raw),
     }
 
 
@@ -247,6 +273,9 @@ def api_activity_detail_comment(activity_id: int):
         "elev_low_m": raw.get("elev_low"),
         "avg_watts": raw.get("average_watts"),
         "pr_count": raw.get("pr_count") or 0,
+        "achievement_count": raw.get("achievement_count") or 0,
+        "trainer": raw.get("trainer", False),
+        "commute": raw.get("commute", False),
     }
 
     api_key = _get_api_key()
@@ -254,7 +283,8 @@ def api_activity_detail_comment(activity_id: int):
         return {"comment": None, "error": "ANTHROPIC_API_KEY not configured"}
 
     client = _anthropic.Anthropic(api_key=api_key)
-    comment = generate_detail_comment(activity_for_comment, grade, client)
+    recent_peers = [dict(a) for a in get_activities(conn, sport_type=sport)]
+    comment = generate_detail_comment(activity_for_comment, grade, client, recent_same_sport=recent_peers)
     if comment:
         conn.execute("UPDATE activities SET detail_comment = ? WHERE id = ?", (comment, activity_id))
         conn.commit()
@@ -266,8 +296,8 @@ def api_segments():
     conn = get_conn()
     init_db(conn)
 
-    koms_raw = get_koms(conn)
-    kom_ids = {r["segment_id"] for r in koms_raw}
+    records_raw = get_my_records(conn)
+    record_ids = {r["segment_id"] for r in records_raw}
     all_efforts = get_all_ranked_efforts(conn)
 
     by_seg: dict[int, dict] = {}
@@ -278,12 +308,15 @@ def api_segments():
                 "name": e["segment_name"],
                 "distance_m": e["segment_distance_m"],
                 "times": [],
-                "ranks": [],
+                "overall_ranks": [],
+                "pr_ranks": [],
             }
         if e["elapsed_time_s"] is not None:
             by_seg[sid]["times"].append(e["elapsed_time_s"])
         if e["overall_rank"] is not None:
-            by_seg[sid]["ranks"].append(e["overall_rank"])
+            by_seg[sid]["overall_ranks"].append(e["overall_rank"])
+        if e["pr_rank"] is not None:
+            by_seg[sid]["pr_ranks"].append(e["pr_rank"])
 
     def _trend_pct(times: list[int]) -> float | None:
         if len(times) < 2:
@@ -302,41 +335,43 @@ def api_segments():
         except Exception:
             return iso[:10]
 
-    koms = [
+    records = [
         {
             "segment_id": r["segment_id"],
             "segment_name": r["segment_name"],
             "distance_m": r["segment_distance_m"],
             "elapsed_time_s": r["elapsed_time_s"],
             "activity_date": _fmt_date(r["activity_date"] or ""),
-            "overall_rank": 1,
+            "record_type": "KOM" if r["overall_rank"] == 1 else "PR",
         }
-        for r in koms_raw
+        for r in records_raw
     ]
 
     opportunities = []
     for sid, data in by_seg.items():
-        if sid in kom_ids:
+        if sid in record_ids:
             continue
         times = data["times"]
-        min_rank = min(data["ranks"]) if data["ranks"] else None
+        min_overall = min(data["overall_ranks"]) if data["overall_ranks"] else None
+        min_pr = min(data["pr_ranks"]) if data["pr_ranks"] else None
         trend_pct = _trend_pct(times)
-        is_near = min_rank in (2, 3)
+        is_near = (min_overall in (2, 3)) or (min_pr in (2, 3))
         is_trending = trend_pct is not None and trend_pct < -3.0
 
         if is_near or is_trending:
+            display_rank = min_overall if min_overall is not None else min_pr
             opportunities.append({
                 "segment_id": sid,
                 "segment_name": data["name"],
                 "distance_m": data["distance_m"],
                 "elapsed_time_s": min(times) if times else None,
-                "overall_rank": min_rank,
+                "overall_rank": display_rank,
                 "trend_pct": trend_pct,
                 "is_trending": is_trending,
             })
 
     opportunities.sort(key=lambda x: (x["overall_rank"] or 99, x["trend_pct"] or 0))
-    return {"koms": koms, "opportunities": opportunities}
+    return {"records": records, "opportunities": opportunities}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -679,6 +714,54 @@ def _dashboard_html() -> str:
       </div>`;
     }
 
+    const SURFACE_COLORS = {
+      asphalt: { bg: '#4a4a54', label: 'Asphalt',  text: '#c4c9ac' },
+      gravel:  { bg: '#b86b30', label: 'Schotter', text: '#fff' },
+      trail:   { bg: '#5a7a3a', label: 'Trail',    text: '#fff' },
+      unknown: { bg: '#353438', label: 'Unbekannt',text: '#8e9379' },
+    };
+
+    function renderSurface(surface) {
+      const section = document.getElementById('panel-surface-section');
+      const container = document.getElementById('panel-surface');
+      if (!surface) { section.style.display = 'none'; return; }
+
+      const total = surface.total_analyzed_m || 1;
+      const slices = [
+        { key: 'asphalt', m: surface.asphalt_m || 0 },
+        { key: 'gravel',  m: surface.gravel_m  || 0 },
+        { key: 'trail',   m: surface.trail_m   || 0 },
+        { key: 'unknown', m: surface.unknown_m || 0 },
+      ].filter(s => s.m > 0);
+
+      // Stacked bar
+      const barSegs = slices.map(s => {
+        const pct = s.m / total * 100;
+        const c = SURFACE_COLORS[s.key];
+        return `<div style="width:${pct.toFixed(1)}%;background:${c.bg};height:100%;display:inline-block;" title="${c.label}: ${(s.m/1000).toFixed(1)} km"></div>`;
+      }).join('');
+
+      // Legend rows
+      const legend = slices.map(s => {
+        const c = SURFACE_COLORS[s.key];
+        const pct = Math.round(s.m / total * 100);
+        const km = (s.m / 1000).toFixed(1);
+        return `<div class="flex items-center gap-2 text-xs">
+          <div class="w-3 h-3 rounded-sm shrink-0" style="background:${c.bg}"></div>
+          <span class="text-on-surface font-medium w-20">${c.label}</span>
+          <span class="text-muted">${pct}%</span>
+          <span class="text-muted ml-auto">${km} km</span>
+        </div>`;
+      }).join('');
+
+      const analyzed_km = (total / 1000).toFixed(1);
+      container.innerHTML = `
+        <div class="w-full h-4 rounded overflow-hidden flex mb-3 bg-surface-high">${barSegs}</div>
+        <div class="space-y-1.5">${legend}</div>
+        <p class="text-xs text-muted mt-2">${analyzed_km} km analysiert</p>`;
+      section.style.display = 'block';
+    }
+
     async function loadDetailComment(id) {
       const el = document.getElementById('panel-ai');
       try {
@@ -701,6 +784,7 @@ def _dashboard_html() -> str:
       document.getElementById('panel-grade').className = 'w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0';
       document.getElementById('panel-stats').innerHTML = '';
       document.getElementById('panel-map').innerHTML = '<span class="text-xs text-muted">Lädt…</span>';
+      document.getElementById('panel-surface-section').style.display = 'none';
       document.getElementById('panel-ai').innerHTML = '<span class="animate-pulse">Analyse wird geladen…</span>';
 
       // Slide in
@@ -737,6 +821,7 @@ def _dashboard_html() -> str:
         ].join('');
 
         initMap(d.summary_polyline);
+        renderSurface(d.surface);
         loadDetailComment(id);
       } catch (e) {
         console.error(e);
@@ -784,16 +869,17 @@ def _dashboard_html() -> str:
         const r = await fetch('/api/segments');
         const d = await r.json();
 
-        if (!d.koms.length && !d.opportunities.length) {
+        if (!d.records.length && !d.opportunities.length) {
           document.getElementById('seg-koms').innerHTML =
             '<p class="text-sm text-muted">Keine Segment-Daten. Starte <code class="bg-surface px-1 rounded">uv run sync.py</code> um Daten zu laden.</p>';
           document.getElementById('seg-opps').innerHTML = '';
           return;
         }
 
-        document.getElementById('seg-koms').innerHTML = segTable(d.koms, [
+        document.getElementById('seg-koms').innerHTML = segTable(d.records, [
           { label: 'Segment',    render: r => escapeHtml(r.segment_name) },
           { label: 'Distanz',    render: r => fmtDist(r.distance_m) },
+          { label: 'Typ',        render: r => `<span class="font-semibold ${r.record_type === 'KOM' ? 'text-lime' : 'text-amber-400'}">${r.record_type}</span>` },
           { label: 'Beste Zeit', render: r => fmtTime(r.elapsed_time_s) },
           { label: 'Datum',      render: r => escapeHtml(r.activity_date || '—') },
         ]);
@@ -859,6 +945,12 @@ def _dashboard_html() -> str:
                                   flex items-center justify-center text-muted text-xs">
         <span>Keine Route verfügbar</span>
       </div>
+    </div>
+
+    <!-- Surface Analysis -->
+    <div class="px-4 pb-4" id="panel-surface-section" style="display:none">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Untergrund</h3>
+      <div id="panel-surface"></div>
     </div>
 
     <!-- AI Analysis -->

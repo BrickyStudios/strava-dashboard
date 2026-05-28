@@ -167,8 +167,8 @@ def test_upsert_segment_efforts_sentinel_for_empty(db):
     assert row is not None
 
 
-def test_get_koms_returns_rank1_segments(db):
-    from lib.db import upsert_segment_efforts, get_koms
+def test_get_my_records_returns_rank1_segments(db):
+    from lib.db import upsert_segment_efforts, get_my_records
     upsert_activity(db, _sample_activity(1))
     upsert_segment_efforts(db, activity_id=1, efforts=[
         {"segment_id": 100, "segment_name": "KOM Seg", "segment_distance_m": 500.0,
@@ -176,11 +176,11 @@ def test_get_koms_returns_rank1_segments(db):
          "pr_rank": 1, "overall_rank": 1},
         {"segment_id": 200, "segment_name": "2nd Seg", "segment_distance_m": 300.0,
          "elapsed_time_s": 45, "start_date_local": "2026-05-01T12:35:00",
-         "pr_rank": 1, "overall_rank": 2},
+         "pr_rank": None, "overall_rank": 2},
     ])
-    koms = get_koms(db)
-    assert len(koms) == 1
-    assert koms[0]["segment_id"] == 100
+    records = get_my_records(db)
+    assert len(records) == 1
+    assert records[0]["segment_id"] == 100
 
 
 def test_get_all_ranked_efforts_excludes_sentinel(db):

@@ -11,6 +11,7 @@ from dotenv import dotenv_values, set_key
 
 from lib.db import get_conn, init_db, upsert_activity, get_sync_state, set_sync_state, upsert_segment_efforts
 from lib.ai_coach import generate_missing_comments
+from lib.surfaces import sync_surfaces
 
 ENV_PATH = Path(__file__).parent / ".env"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
@@ -168,6 +169,9 @@ def main():
 
     print("Syncing segment efforts...")
     sync_segment_efforts(conn, access_token)
+
+    print("Analyzing surface types via OpenStreetMap...")
+    sync_surfaces(conn)
     print("Done.")
 
 
