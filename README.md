@@ -13,6 +13,7 @@
   <a href="#try-it-in-30-seconds"><img alt="Demo mode" src="https://img.shields.io/badge/demo-no_account_needed-C6F432?labelColor=0C0D0B"></a>
   <a href="#tests"><img alt="Tests with pytest" src="https://img.shields.io/badge/tests-pytest-C6F432?logo=pytest&logoColor=C6F432&labelColor=0C0D0B"></a>
   <a href="LICENSE"><img alt="License Apache-2.0" src="https://img.shields.io/github/license/BrickyStudios/strava-dashboard?color=C6F432&labelColor=0C0D0B"></a>
+  <a href="https://github.com/BrickyStudios/strava-dashboard/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/BrickyStudios/strava-dashboard?label=release&color=C6F432&labelColor=0C0D0B"></a>
   <a href="https://github.com/BrickyStudios/strava-dashboard/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/BrickyStudios/strava-dashboard?color=C6F432&labelColor=0C0D0B"></a>
 </p>
 
