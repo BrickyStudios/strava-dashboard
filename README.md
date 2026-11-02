@@ -5,15 +5,15 @@
 <p align="center"><strong>Syncs your Strava activities into SQLite and shows weekly trends, A+ to C grades, AI coach comments from Claude, segment records and route maps with surface types. Runs on your computer; try it without a Strava account in demo mode.</strong></p>
 
 <p align="center">
-  <a href="https://www.python.org/"><img alt="Made with Python" src="https://img.shields.io/badge/made_with-Python-131316?style=for-the-badge&logo=python&logoColor=ABD600"></a>
+  <a href="https://www.python.org/"><img alt="Made with Python" src="https://img.shields.io/badge/made_with-Python-0C0D0B?style=for-the-badge&logo=python&logoColor=C6F432"></a>
   <br>
-  <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-ABD600?logo=fastapi&logoColor=ABD600&labelColor=131316"></a>
-  <a href="https://developers.strava.com/"><img alt="Strava API" src="https://img.shields.io/badge/Strava-API-ABD600?logo=strava&logoColor=ABD600&labelColor=131316"></a>
-  <a href="https://docs.claude.com/"><img alt="AI comments by Claude" src="https://img.shields.io/badge/AI_coach-Claude-ABD600?logo=claude&logoColor=ABD600&labelColor=131316"></a>
-  <a href="#try-it-in-30-seconds"><img alt="Demo mode" src="https://img.shields.io/badge/demo-no_account_needed-ABD600?labelColor=131316"></a>
-  <a href="#tests"><img alt="Tests with pytest" src="https://img.shields.io/badge/tests-pytest-ABD600?logo=pytest&logoColor=ABD600&labelColor=131316"></a>
-  <a href="LICENSE"><img alt="License Apache-2.0" src="https://img.shields.io/github/license/BrickyStudios/strava-dashboard?color=ABD600&labelColor=131316"></a>
-  <a href="https://github.com/BrickyStudios/strava-dashboard/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/BrickyStudios/strava-dashboard?color=ABD600&labelColor=131316"></a>
+  <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-C6F432?logo=fastapi&logoColor=C6F432&labelColor=0C0D0B"></a>
+  <a href="https://developers.strava.com/"><img alt="Strava API" src="https://img.shields.io/badge/Strava-API-C6F432?logo=strava&logoColor=C6F432&labelColor=0C0D0B"></a>
+  <a href="https://docs.claude.com/"><img alt="AI comments by Claude" src="https://img.shields.io/badge/AI_coach-Claude-C6F432?logo=claude&logoColor=C6F432&labelColor=0C0D0B"></a>
+  <a href="#try-it-in-30-seconds"><img alt="Demo mode" src="https://img.shields.io/badge/demo-no_account_needed-C6F432?labelColor=0C0D0B"></a>
+  <a href="#tests"><img alt="Tests with pytest" src="https://img.shields.io/badge/tests-pytest-C6F432?logo=pytest&logoColor=C6F432&labelColor=0C0D0B"></a>
+  <a href="LICENSE"><img alt="License Apache-2.0" src="https://img.shields.io/github/license/BrickyStudios/strava-dashboard?color=C6F432&labelColor=0C0D0B"></a>
+  <a href="https://github.com/BrickyStudios/strava-dashboard/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/BrickyStudios/strava-dashboard?color=C6F432&labelColor=0C0D0B"></a>
 </p>
 
 <p align="center">

@@ -401,13 +401,13 @@ def _empty_html() -> str:
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131316'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23abd600'/%3E%3C/svg%3E">
 
 <script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-[#131316] text-[#e4e1e6] flex items-center justify-center min-h-screen">
+<body class="bg-[#0C0D0B] text-[#F4F1EA] flex items-center justify-center min-h-screen">
   <div class="text-center">
     <h2 class="text-2xl font-semibold mb-4">No data yet</h2>
-    <p class="text-[#c4c9ac] mb-2">Sync your Strava activities:</p>
-    <code class="bg-[#1f1f22] px-3 py-1 rounded text-[#abd600]">uv run sync.py</code>
-    <p class="text-[#c4c9ac] mt-6 mb-2">Or try it with made-up demo data:</p>
-    <code class="bg-[#1f1f22] px-3 py-1 rounded text-[#abd600]">uv run dashboard.py --demo</code>
+    <p class="text-[#A6A49D] mb-2">Sync your Strava activities:</p>
+    <code class="bg-[#171815] px-3 py-1 rounded text-[#C6F432]">uv run sync.py</code>
+    <p class="text-[#A6A49D] mt-6 mb-2">Or try it with made-up demo data:</p>
+    <code class="bg-[#171815] px-3 py-1 rounded text-[#C6F432]">uv run dashboard.py --demo</code>
   </div>
 </body></html>"""
 
@@ -422,7 +422,7 @@ def _dashboard_html() -> str:
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131316'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23abd600'/%3E%3C/svg%3E">
 
   <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0..1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -432,36 +432,42 @@ def _dashboard_html() -> str:
       theme: {
         extend: {
           colors: {
-            'bg':       '#131316',
-            'surface':  '#1f1f22',
-            'surface-low': '#1b1b1e',
-            'surface-high': '#2a2a2d',
-            'border':   '#353438',
-            'on-surface': '#e4e1e6',
-            'muted':    '#c4c9ac',
-            'lime':     '#abd600',
-            'lime-bright': '#c3f400',
-            'orange':   '#f18400',
+            'bg':       '#0C0D0B',
+            'surface':  '#171815',
+            'surface-low': '#121310',
+            'surface-high': '#22231F',
+            'border':   '#2C2D29',
+            'on-surface': '#F4F1EA',
+            'muted':    '#A6A49D',
+            'lime':     '#C6F432',
+            'lime-bright': '#D8FF5C',
+            'orange':   '#FF5B1F',
           },
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          fontFamily: { sans: ['Archivo', 'system-ui', 'sans-serif'], display: ['"Big Shoulders Display"', 'Impact', 'sans-serif'] },
         }
       }
     }
   </script>
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
-    .grade-ap { background:#c3f400; color:#161e00; }
-    .grade-a  { background:#abd60099; color:#161e00; }
-    .grade-bp { background:#f18400; color:#2f1500; }
-    .grade-b  { background:#2a2a2d; color:#e4e1e6; border:1px solid #353438; }
-    .grade-c  { background:#1b1b1e; color:#8e9379; border:1px solid #353438; }
+    /* FitShare look: race-bib numbers in Big Shoulders, text in Archivo, volt on ink */
+    body { font-family: 'Archivo', system-ui, sans-serif; }
+    h2, .text-3xl, .grade-ap, .grade-a, .grade-bp, .grade-b, .grade-c { font-family: 'Big Shoulders Display', Impact, sans-serif; }
+    h2 { text-transform: uppercase; font-weight: 800; letter-spacing: .02em; font-size: 1.6rem; }
+    section + section h2, div + h2 { margin-top: 2rem; }
+    .text-3xl { font-size: 2.9rem; line-height: 1; font-weight: 800; letter-spacing: -.01em; }
+    .grade-ap, .grade-a, .grade-bp, .grade-b, .grade-c { font-size: 1rem; font-weight: 800; }
+    .grade-ap { background:#D8FF5C; color:#0C0D0B; }
+    .grade-a  { background:#9DC22A; color:#0C0D0B; }
+    .grade-bp { background:#FF5B1F; color:#0C0D0B; }
+    .grade-b  { background:#22231F; color:#F4F1EA; border:1px solid #2C2D29; }
+    .grade-c  { background:#121310; color:#7C7A74; border:1px solid #2C2D29; }
   </style>
 </head>
 <body class="bg-bg text-on-surface min-h-screen">
 
   <!-- Header -->
   <header class="sticky top-0 z-10 bg-bg/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
-    <h1 class="text-lg font-bold tracking-tight text-lime">STRAVA DASHBOARD</h1>
+    <h1 class="text-sm font-extrabold tracking-[.3em] text-on-surface flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-lime inline-block"></span>STRAVA DASHBOARD</h1>
     <div class="flex gap-3 items-center">
       <select id="sport" class="bg-surface border border-border text-on-surface text-sm rounded px-2 py-1 focus:outline-none focus:border-lime">
         <option value="" selected>All sports</option>
@@ -660,9 +666,9 @@ def _dashboard_html() -> str:
       pctBadge(d.summary.km_vs_prev_week_pct, 'badge-km');
       pctBadge(d.summary.speed_vs_prev_week_pct, 'badge-speed');
       pctBadge(d.summary.elevation_vs_prev_week_pct, 'badge-elev');
-      renderSparkline('spark-km', d.summary.sparklines.km, '#abd600');
-      renderSparkline('spark-speed', d.summary.sparklines.speed_eas, '#abd600');
-      renderSparkline('spark-elev', d.summary.sparklines.elevation, '#abd600');
+      renderSparkline('spark-km', d.summary.sparklines.km, '#C6F432');
+      renderSparkline('spark-speed', d.summary.sparklines.speed_eas, '#C6F432');
+      renderSparkline('spark-elev', d.summary.sparklines.elevation, '#C6F432');
 
       // Activities
       const feed = document.getElementById('activity-feed');
@@ -671,8 +677,8 @@ def _dashboard_html() -> str:
         : '<p class="text-muted text-sm">No activities found.</p>';
 
       // Trends
-      renderSparkline('trend-speed', d.trends.speed_eas, '#abd600');
-      renderSparkline('trend-km', d.trends.volume_km, '#f18400');
+      renderSparkline('trend-speed', d.trends.speed_eas, '#C6F432');
+      renderSparkline('trend-km', d.trends.volume_km, '#FF5B1F');
 
       // Trend badges: last vs first week. The current week is still running, so it's left out.
       function trendBadge(series, elId, color) {
@@ -721,7 +727,7 @@ def _dashboard_html() -> str:
       const coords = decodePolyline(polyline);
       _leafletMap = L.map(container, { zoomControl: false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(_leafletMap);
-      const line = L.polyline(coords, { color: '#abd600', weight: 3 }).addTo(_leafletMap);
+      const line = L.polyline(coords, { color: '#C6F432', weight: 3 }).addTo(_leafletMap);
       _leafletMap.fitBounds(line.getBounds(), { padding: [8, 8] });
     }
 
@@ -729,15 +735,15 @@ def _dashboard_html() -> str:
       if (value === null || value === undefined) return '';
       return `<div class="bg-surface-low border border-border rounded-lg p-3">
         <p class="text-xs text-muted mb-1">${label}</p>
-        <p class="text-base font-bold text-on-surface">${value}<span class="text-xs font-normal text-muted ml-1">${unit}</span></p>
+        <p class="font-display text-2xl font-extrabold text-on-surface leading-none mt-1">${value}<span class="font-sans text-xs font-medium text-muted ml-1">${unit}</span></p>
       </div>`;
     }
 
     const SURFACE_COLORS = {
-      asphalt: { bg: '#4a4a54', label: 'Asphalt',  text: '#c4c9ac' },
+      asphalt: { bg: '#4a4a54', label: 'Asphalt',  text: '#A6A49D' },
       gravel:  { bg: '#b86b30', label: 'Gravel', text: '#fff' },
       trail:   { bg: '#5a7a3a', label: 'Trail',    text: '#fff' },
-      unknown: { bg: '#353438', label: 'Unknown',text: '#8e9379' },
+      unknown: { bg: '#2C2D29', label: 'Unknown',text: '#7C7A74' },
     };
 
     function renderSurface(surface) {
