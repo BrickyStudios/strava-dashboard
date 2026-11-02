@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- Social preview 1280x640. Render: see tools note in README (playwright, element #card) -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&display=block">
+<style>
+* { box-sizing: border-box; margin: 0; }
+body { background: #222; }
+#card { position: relative; width: 1280px; height: 640px; overflow: hidden; font-family: Inter, sans-serif; color: #e4e1e6;
+  background: radial-gradient(ellipse 60% 80% at 85% 40%, #24271a, #131316 70%); }
+.t { position: absolute; left: 72px; top: 70px; width: 560px; }
+.k { font-weight: 700; font-size: 15px; letter-spacing: .26em; color: #8f9384; }
+h1 { margin-top: 26px; font-weight: 800; font-size: 82px; line-height: .98; letter-spacing: -.03em; }
+h1 span { color: #abd600; }
+p { margin-top: 26px; font-size: 22px; line-height: 1.45; color: #c4c9ac; }
+.chips { position: absolute; left: 72px; bottom: 64px; display: flex; gap: 10px; }
+.chips i { font-style: normal; font-weight: 700; font-size: 14px; letter-spacing: .12em; padding: 10px 16px; border-radius: 999px; border: 1px solid #3a3d33; color: #c4c9ac; }
+.shot { position: absolute; left: 690px; top: 70px; width: 760px; border-radius: 18px; border: 1px solid #34362e;
+  box-shadow: 0 40px 80px rgba(0,0,0,.55); transform: rotate(-4deg); }
+.shot2 { position: absolute; left: 960px; top: 300px; width: 420px; border-radius: 16px; border: 1px solid #34362e;
+  box-shadow: 0 30px 60px rgba(0,0,0,.6); transform: rotate(3deg); }
+</style></head><body>
+<div id="card">
+  <img class="shot" src="dashboard.png" alt="">
+  <img class="shot2" src="segments.png" alt="">
+  <div class="t">
+    <div class="k">STRAVA DASHBOARD</div>
+    <h1>Your rides.<br><span>On your machine.</span></h1>
+    <p>Local Strava dashboard with activity grades, AI coach comments, segment records and route maps.</p>
+  </div>
+  <div class="chips"><i>PYTHON</i><i>FASTAPI</i><i>CLAUDE</i><i>DEMO MODE</i></div>
+</div>
+</body></html>

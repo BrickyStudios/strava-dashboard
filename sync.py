@@ -172,7 +172,11 @@ def main():
     generate_missing_comments(conn)
 
     print("Syncing segment efforts...")
-    sync_segment_efforts(conn, access_token)
+    try:
+        sync_segment_efforts(conn, access_token)
+    except DailyLimitReached as e:
+        # activities without segment rows are picked up again on the next run
+        print(f"Warning: {e}. Segment details continue on the next run.")
 
     print("Analyzing surface types via OpenStreetMap...")
     sync_surfaces(conn)

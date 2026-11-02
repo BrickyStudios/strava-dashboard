@@ -176,3 +176,22 @@ def test_parse_segment_effort_rank2_skips_non_overall():
     }
     result = parse_segment_effort(raw)
     assert result["overall_rank"] == 2
+
+
+def test_segment_sync_stops_cleanly_at_daily_limit(tmp_path):
+    """Hitting Strava's daily limit during segment sync ends the run with a message, not a traceback."""
+    from sync import main, DailyLimitReached
+    env_file = tmp_path / ".env"
+    env_file.write_text("STRAVA_CLIENT_ID=1\nSTRAVA_CLIENT_SECRET=s\nSTRAVA_REFRESH_TOKEN=r\n")
+    token = MagicMock()
+    token.json.return_value = {"access_token": "a", "refresh_token": "r2"}
+    empty = MagicMock()
+    empty.json.return_value = []
+    empty.headers = {"X-RateLimit-Limit": "100,1000", "X-RateLimit-Usage": "1,1"}
+    with patch("sys.argv", ["sync.py"]), patch("httpx.post", return_value=token), \
+         patch("httpx.get", return_value=empty), patch("sync.ENV_PATH", env_file), \
+         patch("sync.get_conn", return_value=__import__("sqlite3").connect(":memory:")), \
+         patch("sync.generate_missing_comments"), patch("sync.sync_surfaces") as surfaces, \
+         patch("sync.sync_segment_efforts", side_effect=DailyLimitReached("Daily limit reached: 995/1000")):
+        main()
+    surfaces.assert_called_once()

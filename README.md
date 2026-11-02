@@ -1,98 +1,110 @@
-<div align="center">
+<p align="center"><img src="docs/images/social-preview.png" width="860" alt="Strava Dashboard: your rides on your machine. Dark dashboard with weekly distance, speed and elevation cards, recent activities with grades and a segment records table"></p>
 
-# Strava Dashboard
+<h1 align="center">Strava Dashboard: a local, self-hosted Strava stats dashboard</h1>
 
-<!-- badges -->
-[![python](https://img.shields.io/badge/made_with-python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Strava API](https://img.shields.io/badge/Strava-API-FC4C02?logo=strava&logoColor=white)](https://developers.strava.com/)
-[![Last Commit](https://img.shields.io/github/last-commit/BrickyStudios/strava-dashboard)](https://github.com/BrickyStudios/strava-dashboard/commits/main)
-[![Stars](https://img.shields.io/github/stars/BrickyStudios/strava-dashboard?style=flat)](https://github.com/BrickyStudios/strava-dashboard/stargazers)
-[![License](https://img.shields.io/github/license/BrickyStudios/strava-dashboard)](https://github.com/BrickyStudios/strava-dashboard/blob/main/LICENSE)
+<p align="center"><strong>Syncs your Strava activities into SQLite and shows weekly trends, A+ to C grades, AI coach comments from Claude, segment records and route maps with surface types. Runs on your computer; try it without a Strava account in demo mode.</strong></p>
 
-**Local Strava performance dashboard: activity grades, AI coaching comments from Claude, trend charts and route maps. Your data stays on your machine.**
+<p align="center">
+  <a href="https://www.python.org/"><img alt="Made with Python" src="https://img.shields.io/badge/made_with-Python-131316?style=for-the-badge&logo=python&logoColor=ABD600"></a>
+  <br>
+  <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-ABD600?logo=fastapi&logoColor=ABD600&labelColor=131316"></a>
+  <a href="https://developers.strava.com/"><img alt="Strava API" src="https://img.shields.io/badge/Strava-API-ABD600?logo=strava&logoColor=ABD600&labelColor=131316"></a>
+  <a href="https://docs.claude.com/"><img alt="AI comments by Claude" src="https://img.shields.io/badge/AI_coach-Claude-ABD600?logo=claude&logoColor=ABD600&labelColor=131316"></a>
+  <a href="#try-it-in-30-seconds"><img alt="Demo mode" src="https://img.shields.io/badge/demo-no_account_needed-ABD600?labelColor=131316"></a>
+  <a href="#tests"><img alt="Tests with pytest" src="https://img.shields.io/badge/tests-pytest-ABD600?logo=pytest&logoColor=ABD600&labelColor=131316"></a>
+  <a href="LICENSE"><img alt="License Apache-2.0" src="https://img.shields.io/github/license/BrickyStudios/strava-dashboard?color=ABD600&labelColor=131316"></a>
+  <a href="https://github.com/BrickyStudios/strava-dashboard/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/BrickyStudios/strava-dashboard?color=ABD600&labelColor=131316"></a>
+</p>
 
-</div>
+<p align="center">
+  <a href="#try-it-in-30-seconds">Try it</a> ·
+  <a href="#connect-your-strava-account">Connect Strava</a> ·
+  <a href="#what-it-shows">What it shows</a> ·
+  <a href="#how-grades-work">How grades work</a> ·
+  <a href="#mcp-server-for-claude-desktop">MCP server</a>
+</p>
 
-Built on top of [JonoCX/strava-mcp](https://github.com/JonoCX/strava-mcp) with a full dashboard layer added on top.
+## Try it in 30 seconds
 
-## Features
-
-- **Sync** — fetches your Strava activities into a local SQLite cache with token refresh
-- **Grading** — grades every activity A+→C using a composite percentile score (distance 50%, EAS speed 30%, elevation 20%)
-- **AI coach comments** — one-sentence coaching comment per activity via Claude Haiku, generated after each sync
-- **Performance dashboard** — dark-theme FastAPI web app at `localhost:8080`:
-  - Weekly summary cards (distance, EAS speed, elevation) with sparklines and week-over-week comparisons
-  - Activity feed with grade badges and AI comments
-  - Trend charts (EAS speed & volume) over 4/12/26/52 weeks
-  - Sport and time-window filters
-- **Activity detail panel** — click any activity to slide open a detail view with:
-  - Full stats (max speed, elevation profile, watts, heart rate, PRs, energy)
-  - Route map via Leaflet + OpenStreetMap
-  - 3–4 sentence AI coaching analysis from Claude Haiku
-
-## Setup
-
-### Dependencies
-
-- `uv`
-- A Strava account with a developer app — [create one here](https://www.strava.com/settings/api)
-- An Anthropic API key (for AI comments) — [get one here](https://console.anthropic.com/)
-
-### 1. Install dependencies
+Needs [uv](https://docs.astral.sh/uv/). No Strava account, no API key:
 
 ```bash
-uv sync
+git clone https://github.com/BrickyStudios/strava-dashboard
+cd strava-dashboard
+uv run dashboard.py --demo
 ```
 
-### 2. Configure credentials
+Your browser opens `http://localhost:8080` with half a year of made-up rides and runs around Innsbruck, including grades, coach comments, surface types and segments. Demo mode doesn't contact Strava, Claude or the surface lookup; the page only loads its map tiles, fonts and scripts.
 
-Copy `.env.example` to `.env` and fill in your values:
+<p align="center">
+  <img src="docs/images/dashboard.png" width="860" alt="Dashboard: this week's distance, speed and elevation with comparison to the same days last week, list of recent activities with grades and one-line coach comments">
+</p>
 
-```bash
-cp .env.example .env
-```
+## Connect your Strava account
 
-```bash
-STRAVA_CLIENT_ID=<your_client_id>
-STRAVA_CLIENT_SECRET=<your_client_secret>
-STRAVA_ACCESS_TOKEN=<your_access_token>
-STRAVA_REFRESH_TOKEN=<your_refresh_token>
-ANTHROPIC_API_KEY=<your_anthropic_api_key>
-```
+1. Create an app at [strava.com/settings/api](https://www.strava.com/settings/api). Any name works; set **Authorization Callback Domain** to `localhost`.
+2. Run `uv run auth.py` and paste the client ID and secret when asked. Strava's consent page opens; allow access to your activities. The tokens land in `.env`.
+3. Run `uv run sync.py`. The first run loads your whole history. Segment details need one request per activity and Strava allows 1,000 a day, so a long history can take more than one run; each run continues where the last one stopped.
+4. Run `uv run dashboard.py`.
 
-To get your Strava tokens, follow the [Strava OAuth guide](https://developers.strava.com/docs/getting-started/).
+Optional: put an [Anthropic API key](https://console.anthropic.com/) into `.env` as `ANTHROPIC_API_KEY` for the coach comments, and `COACH_LANGUAGE=German` (or any language) if you don't want them in English. Without a key everything else works.
 
-### 3. Sync activities
+## What it shows
 
-```bash
-uv run sync.py
-```
+**This week.** Distance, speed and elevation, each compared with the same weekdays last week, so a Monday doesn't show up as "-100 %". Sparklines for the last eight weeks.
 
-This fetches your activities, stores them locally, and generates AI coaching comments for recent rides.
+**Recent activities.** Every activity gets a grade from A+ to C and a one-sentence coach comment (Claude Haiku 5.5, written once after each sync and cached).
 
-### 4. Open the dashboard
+**Activity detail.** Click an activity for all stats (speed, heart rate, power, energy, altitude range, Strava PRs), the route on an OpenStreetMap map, the share of asphalt, gravel and trail along the route (from OpenStreetMap's Overpass API), and a 3 to 4 sentence analysis from Claude Sonnet 5.5 that compares the activity with your last five of the same sport.
 
-```bash
-uv run dashboard.py
-```
+<p align="center">
+  <img src="docs/images/activity-detail.png" width="860" alt="Activity detail panel: stat grid with distance, duration, speeds, elevation, heart rate and power, route map near Innsbruck">
+</p>
 
-Opens `http://localhost:8080` in your browser.
+**Segments.** Your KOMs and personal records, and "record chances": segments where you're ranked 2nd or 3rd, or where your times dropped by more than 3 %.
 
-## MCP server (optional)
+<p align="center">
+  <img src="docs/images/segments.png" width="860" alt="Segments tab: table of my records with KOM badges and best times, table of record chances with rank and how much faster you got">
+</p>
 
-The original MCP server for Claude Desktop is still included:
+**Trends.** Weekly speed and volume over 4, 12, 26 or 52 weeks, filtered by sport. The sport filter lists the sports in your own data.
+
+## How grades work
+
+Each activity is ranked against your other activities of the same sport:
+
+| Part | Weight | What counts |
+|---|---|---|
+| Distance | 50 % | percentile among your activities |
+| Speed (EAS) | 30 % | average speed plus 0.04 km/h per metre of climbing per km, so hilly rides aren't punished |
+| Elevation | 20 % | percentile among your activities |
+
+85+ is A+, 70+ A, 55+ B+, 40+ B, below that C. With fewer than five activities of a sport, the grade comes from fixed distance thresholds instead.
+
+## Costs and privacy
+
+The data stays in `data/activities.db` on your computer. The dashboard talks to Strava (sync), OpenStreetMap (map tiles, surface types) and, if you set a key, the Claude API. Coach comments cost a fraction of a cent each with Haiku 5.5; detail analyses run only when you open an activity and are cached after that.
+
+## MCP server for Claude Desktop
+
+The repository started as [JonoCX/strava-mcp](https://github.com/JonoCX/strava-mcp), and its MCP server is still included. It lets Claude Desktop fetch activities and read your local stats (weekly volume, trends, personal bests):
 
 ```bash
 uv run mcp install main.py
 ```
 
-## Running tests
+## Tests
 
 ```bash
 uv run pytest
 ```
 
+The tests cover grading, the sync, the API endpoints, the coach prompts, the Strava login flow and the demo data. None of them call Strava or Claude.
+
 ## Tech stack
 
-Python 3.12 · FastAPI · SQLite · anthropic SDK · Tailwind CSS · Leaflet.js · pytest
+Python 3.12 · FastAPI · SQLite · Anthropic SDK · Tailwind CSS · Leaflet · pytest
+
+## License
+
+[Apache-2.0](LICENSE), like the original strava-mcp. Not affiliated with Strava, Inc. Strava is a trademark of Strava, Inc.
