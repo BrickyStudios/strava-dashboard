@@ -1,6 +1,18 @@
+<div align="center">
+
 # Strava Dashboard
 
-A local performance dashboard for Strava activities with AI-powered coaching insights.
+<!-- badges -->
+[![python](https://img.shields.io/badge/made_with-python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Strava API](https://img.shields.io/badge/Strava-API-FC4C02?logo=strava&logoColor=white)](https://developers.strava.com/)
+[![Last Commit](https://img.shields.io/github/last-commit/BrickyStudios/strava-dashboard)](https://github.com/BrickyStudios/strava-dashboard/commits/main)
+[![Stars](https://img.shields.io/github/stars/BrickyStudios/strava-dashboard?style=flat)](https://github.com/BrickyStudios/strava-dashboard/stargazers)
+[![License](https://img.shields.io/github/license/BrickyStudios/strava-dashboard)](https://github.com/BrickyStudios/strava-dashboard/blob/main/LICENSE)
+
+**Local Strava performance dashboard: activity grades, AI coaching comments from Claude, trend charts and route maps. Your data stays on your machine.**
+
+</div>
 
 Built on top of [JonoCX/strava-mcp](https://github.com/JonoCX/strava-mcp) with a full dashboard layer added on top.
 
