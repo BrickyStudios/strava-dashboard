@@ -1,12 +1,15 @@
 # lib/db.py
 import json
+import os
 import sqlite3
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent.parent / "data" / "activities.db"
 
 
-def get_conn(path: Path = DB_PATH) -> sqlite3.Connection:
+def get_conn(path: Path | None = None) -> sqlite3.Connection:
+    # STRAVA_DASHBOARD_DB is read per call, so `dashboard.py --demo` can point everything at the demo DB
+    path = Path(path or os.environ.get("STRAVA_DASHBOARD_DB") or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row

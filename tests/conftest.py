@@ -1,5 +1,6 @@
 # tests/conftest.py
 import sqlite3
+from datetime import date, timedelta
 import pytest
 from lib.db import init_db, upsert_activity
 
@@ -31,6 +32,13 @@ def db_with_many_activities(db):
     return db
 
 
+# Dates relative to today: the trend tools look at the trailing N weeks, fixed dates expire.
+_MONDAY = date.today() - timedelta(days=date.today().weekday())
+RIDE1_DAY = _MONDAY - timedelta(days=13)   # Tuesday two weeks ago
+RUN_DAY = _MONDAY - timedelta(days=4)      # Thursday last week
+RIDE2_DAY = _MONDAY - timedelta(days=2)    # Saturday last week (same ISO week as the run)
+
+
 @pytest.fixture
 def db_with_activities(db):
     """DB with 3 sample activities across 2 ISO weeks."""
@@ -39,9 +47,9 @@ def db_with_activities(db):
             "id": 1,
             "name": "Morning Ride",
             "sport_type": "GravelRide",
-            # W19 (May 5 is W19, separating from W20 activities below)
-            "start_date": "2026-05-05T07:00:00Z",
-            "start_date_local": "2026-05-05T09:00:00",
+            # an earlier ISO week than the two below
+            "start_date": f"{RIDE1_DAY}T07:00:00Z",
+            "start_date_local": f"{RIDE1_DAY}T09:00:00",
             "distance": 48900.0,
             "moving_time": 8928,
             "total_elevation_gain": 213.0,
@@ -54,8 +62,8 @@ def db_with_activities(db):
             "id": 2,
             "name": "Seen Runde",
             "sport_type": "GravelRide",
-            "start_date": "2026-05-16T07:00:00Z",
-            "start_date_local": "2026-05-16T09:00:00",
+            "start_date": f"{RIDE2_DAY}T07:00:00Z",
+            "start_date_local": f"{RIDE2_DAY}T09:00:00",
             "distance": 75300.0,
             "moving_time": 11580,
             "total_elevation_gain": 417.0,
@@ -68,8 +76,8 @@ def db_with_activities(db):
             "id": 3,
             "name": "Short Run",
             "sport_type": "Run",
-            "start_date": "2026-05-14T06:00:00Z",
-            "start_date_local": "2026-05-14T08:00:00",
+            "start_date": f"{RUN_DAY}T06:00:00Z",
+            "start_date_local": f"{RUN_DAY}T08:00:00",
             "distance": 5000.0,
             "moving_time": 1500,
             "total_elevation_gain": 20.0,

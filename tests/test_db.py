@@ -1,5 +1,7 @@
 # tests/test_db.py
 import sqlite3
+from datetime import timedelta
+from tests.conftest import RIDE2_DAY
 import pytest
 from lib.db import init_db, upsert_activity, get_activities, get_sync_state, set_sync_state
 
@@ -79,8 +81,8 @@ def test_get_activities_filter_by_sport(db_with_activities):
 def test_get_activities_filter_by_date(db_with_activities):
     rows = get_activities(
         db_with_activities,
-        since_local="2026-05-15",
-        until_local="2026-05-17",
+        since_local=str(RIDE2_DAY - timedelta(days=1)),
+        until_local=str(RIDE2_DAY + timedelta(days=1)),
     )
     assert len(rows) == 1
     assert rows[0]["id"] == 2

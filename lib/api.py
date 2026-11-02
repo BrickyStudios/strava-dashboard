@@ -4,12 +4,13 @@ import httpx
 import logging
 
 from datetime import datetime
+from pathlib import Path
 
 from dotenv import dotenv_values
 
 from meteostat import Point, Hourly
 
-ENVS = dotenv_values(".env")
+ENV_PATH = Path(__file__).parent.parent / ".env"
 logger = logging.getLogger(__name__)
 
 STRAVA_ACCESS_TOKEN_ENDPOINT = "https://www.strava.com/oauth/token"
@@ -18,13 +19,17 @@ STRAVA_ACTIVITIES_ENDPOINT = (
 )
 STRAVA_ACTIVITY_DETAILS_ENDPOINT = "https://www.strava.com/api/v3/activities/{activity_id}?include_all_efforts=true"
 
-ACCESS_TOKEN_PAYLOAD = {
-    "client_id": ENVS["STRAVA_CLIENT_ID"],
-    "client_secret": ENVS["STRAVA_CLIENT_SECRET"],
-    "refresh_token": ENVS["STRAVA_REFRESH_TOKEN"],
-    "grant_type": "refresh_token",
-    "f": "json",
-}
+
+def _token_payload() -> dict:
+    """Read at call time, so importing this module works without a .env (dashboard, tests)."""
+    envs = dotenv_values(ENV_PATH)
+    return {
+        "client_id": envs.get("STRAVA_CLIENT_ID"),
+        "client_secret": envs.get("STRAVA_CLIENT_SECRET"),
+        "refresh_token": envs.get("STRAVA_REFRESH_TOKEN"),
+        "grant_type": "refresh_token",
+        "f": "json",
+    }
 
 
 async def make_request(url: str, access_token: str = None) -> dict:
@@ -41,7 +46,7 @@ async def make_request(url: str, access_token: str = None) -> dict:
         try:
             if access_token is None:
                 response = await client.post(
-                    url=url, data=ACCESS_TOKEN_PAYLOAD
+                    url=url, data=_token_payload()
                 )
             else:
                 response = await client.get(

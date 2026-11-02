@@ -30,10 +30,19 @@ def db():
     conn.close()
 
 
-def _mock_client(text="Tolle Fahrt! Dein bestes Ergebnis diese Woche."):
+def _mock_client(text="Great ride! Your best result this week.", stop_reason="end_turn"):
+    """Shaped like a real response: a thinking block can come before the text."""
     mock = MagicMock()
-    mock.messages.create.return_value.content = [MagicMock(text=text)]
+    resp = mock.messages.create.return_value
+    resp.stop_reason = stop_reason
+    resp.content = [MagicMock(type="thinking", thinking=""), MagicMock(type="text", text=text)]
     return mock
+
+
+def test_refusal_returns_none():
+    from lib.ai_coach import _text
+    assert _text(_mock_client(stop_reason="refusal").messages.create.return_value) is None
+    assert _text(_mock_client("  Solid.  ").messages.create.return_value) == "Solid."
 
 
 def test_generate_comment_returns_string():
@@ -101,7 +110,7 @@ def test_generate_detail_comment_returns_string():
         "kilojoules": 1376.0, "elev_high_m": 182.0, "elev_low_m": 73.0,
         "avg_watts": None, "pr_count": 0,
     }
-    client = _mock_client("Hervorragende Fahrt! Du hast eine exzellente Pace gehalten.")
+    client = _mock_client("Excellent ride! You held a strong pace.")
     result = generate_detail_comment(row, "A+", client)
     assert isinstance(result, str)
     assert len(result) > 10

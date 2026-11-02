@@ -12,16 +12,33 @@ from lib.grade import compute_grade
 from lib.db import get_activities
 
 ENV_PATH = Path(__file__).parent.parent / ".env"
-MODEL_SHORT = "claude-haiku-4-5-20251001"
-MODEL_DETAIL = "claude-sonnet-4-6"
-MAX_TOKENS = 100
-MAX_TOKENS_DETAIL = 400
+MODEL_SHORT = "claude-haiku-5-5"    # one sentence per activity, runs for every new activity
+MODEL_DETAIL = "claude-sonnet-5-5"  # 3–4 sentence analysis, only when a detail panel opens
+# Thinking counts against max_tokens, so leave headroom above the visible answer.
+MAX_TOKENS = 1024
+MAX_TOKENS_DETAIL = 4000
+# Sonnet 5.5: on a policy decline the API retries on a fallback model in the same call.
+FALLBACK_HEADERS = {"anthropic-beta": "server-side-fallback-2026-07-01"}
+FALLBACK_BODY = {"fallbacks": "default"}
 
 logger = logging.getLogger(__name__)
 
 
 def _get_api_key() -> str:
     return dotenv_values(ENV_PATH).get("ANTHROPIC_API_KEY", "")
+
+
+def _language() -> str:
+    """Language of the coach's comments, e.g. COACH_LANGUAGE=German in .env. Default English."""
+    return dotenv_values(ENV_PATH).get("COACH_LANGUAGE") or "English"
+
+
+def _text(response) -> str | None:
+    """The answer text; None on a refusal. Thinking blocks come first, so don't read content[0]."""
+    if response.stop_reason == "refusal":
+        return None
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    return text or None
 
 
 def _enrich_from_raw(activity: dict) -> dict:
@@ -47,38 +64,40 @@ def generate_comment(activity: dict, grade: str, client: anthropic.Anthropic) ->
 
     extra_lines = []
     if activity.get("trainer"):
-        extra_lines.append("Art: Indoor-Trainer")
+        extra_lines.append("Type: indoor trainer")
     if activity.get("commute"):
-        extra_lines.append("Art: Pendel-Fahrt")
+        extra_lines.append("Type: commute")
     achievements = activity.get("achievement_count") or 0
     if achievements:
-        extra_lines.append(f"Achievements erzielt: {achievements}")
+        extra_lines.append(f"Achievements: {achievements}")
     pr_count = activity.get("pr_count") or 0
     if pr_count:
-        extra_lines.append(f"Persönliche Rekorde: {pr_count}")
+        extra_lines.append(f"Personal records: {pr_count}")
 
     extra = ("\n" + "\n".join(extra_lines)) if extra_lines else ""
 
     prompt = (
-        f"Du bist ein erfahrener Trainer. Gib einen kurzen, motivierenden Kommentar "
-        f"(1–2 Sätze, Deutsch, Du-Form) zu dieser Einheit:\n\n"
-        f"Sport: {activity.get('sport_type', 'Unbekannt')}\n"
+        f"You are an experienced endurance coach. Write a short, motivating comment "
+        f"(1–2 sentences, in {_language()}, addressing the athlete directly) on this session:\n\n"
+        f"Sport: {activity.get('sport_type', 'unknown')}\n"
         f"Name: {activity.get('name', '')}\n"
-        f"Distanz: {dist_km:.1f} km\n"
-        f"Dauer: {duration_min:.0f} min\n"
-        f"Ø Tempo: {speed_kmh:.1f} km/h\n"
-        f"Höhenmeter: {elev:.0f} m\n"
-        f"Note: {grade}{extra}\n\n"
-        f"Nur der Kommentar, keine Einleitung."
+        f"Distance: {dist_km:.1f} km\n"
+        f"Duration: {duration_min:.0f} min\n"
+        f"Avg speed: {speed_kmh:.1f} km/h\n"
+        f"Elevation gain: {elev:.0f} m\n"
+        f"Grade: {grade}{extra}\n\n"
+        f"Reply with the comment only."
     )
 
     try:
         response = client.messages.create(
             model=MODEL_SHORT,
             max_tokens=MAX_TOKENS,
+            thinking={"type": "disabled"},  # a one-liner needs no reasoning; allowed on Haiku 5.5 up to effort high
+            output_config={"effort": "low"},
             messages=[{"role": "user", "content": prompt}],
         )
-        return response.content[0].text.strip()
+        return _text(response)
     except Exception as e:
         logger.warning("AI comment generation failed for activity %s: %s", activity.get("id"), e)
         return None
@@ -103,28 +122,29 @@ def generate_detail_comment(
     achievements = activity.get("achievement_count") or 0
 
     lines = [
-        "Du bist ein erfahrener Trainer. Analysiere diese Einheit präzise (3–4 Sätze, Deutsch, Du-Form). "
-        "Beziehe konkret Stellung: Was lief gut, was könnte optimiert werden, und was ist der wichtigste Trainingshinweis?\n",
-        f"Sport: {activity.get('sport_type', 'Unbekannt')}",
+        f"You are an experienced endurance coach. Analyse this session precisely (3–4 sentences, in {_language()}, "
+        "addressing the athlete directly). Be specific: what went well, what could be better, "
+        "and the single most important training tip?\n",
+        f"Sport: {activity.get('sport_type', 'unknown')}",
         f"Name: {activity.get('name', '')}",
-        f"Note: {grade}",
-        f"Distanz: {dist_km:.1f} km",
-        f"Dauer: {duration_min:.0f} min",
-        f"Ø Tempo: {speed_kmh:.1f} km/h  |  Max: {max_speed_kmh:.1f} km/h",
-        f"Höhenmeter: {elev:.0f} m",
+        f"Grade: {grade}",
+        f"Distance: {dist_km:.1f} km",
+        f"Duration: {duration_min:.0f} min",
+        f"Avg speed: {speed_kmh:.1f} km/h  |  Max: {max_speed_kmh:.1f} km/h",
+        f"Elevation gain: {elev:.0f} m",
     ]
     if elev_high is not None and elev_low is not None:
-        lines.append(f"Höhenprofil: {elev_low:.0f}–{elev_high:.0f} m ü.NN")
+        lines.append(f"Altitude range: {elev_low:.0f}–{elev_high:.0f} m")
     if heartrate:
-        lines.append(f"Ø Herzfrequenz: {heartrate:.0f} bpm")
+        lines.append(f"Avg heart rate: {heartrate:.0f} bpm")
     if watts:
-        lines.append(f"Ø Leistung: {watts:.0f} W  |  {(watts * duration_min * 60 / 1000):.0f} kJ")
+        lines.append(f"Avg power: {watts:.0f} W  |  {(watts * duration_min * 60 / 1000):.0f} kJ")
     if activity.get("trainer"):
-        lines.append("Art: Indoor-Trainer")
+        lines.append("Type: indoor trainer")
     if activity.get("commute"):
-        lines.append("Art: Pendel-Fahrt")
+        lines.append("Type: commute")
     if pr_count:
-        lines.append(f"Strava-PRs: {pr_count}")
+        lines.append(f"Strava PRs: {pr_count}")
     if achievements:
         lines.append(f"Achievements: {achievements}")
 
@@ -133,20 +153,23 @@ def generate_detail_comment(
         avg_dist = sum((a.get("distance_m") or 0) / 1000 for a in recent) / len(recent)
         avg_spd = sum((a.get("avg_speed_ms") or 0) * 3.6 for a in recent) / len(recent)
         lines.append(
-            f"\nVergleich letzte {len(recent)} Einheiten (selber Sport): "
-            f"Ø {avg_dist:.1f} km, Ø {avg_spd:.1f} km/h"
+            f"\nLast {len(recent)} sessions of the same sport: "
+            f"avg {avg_dist:.1f} km, avg {avg_spd:.1f} km/h"
         )
 
-    lines.append("\nNur die Analyse, keine Einleitung.")
+    lines.append("\nReply with the analysis only.")
     prompt = "\n".join(lines)
 
     try:
         response = client.messages.create(
             model=MODEL_DETAIL,
             max_tokens=MAX_TOKENS_DETAIL,
+            output_config={"effort": "low"},  # short analysis; thinking stays on (it can't be disabled on Sonnet 5.5)
             messages=[{"role": "user", "content": prompt}],
+            extra_headers=FALLBACK_HEADERS,
+            extra_body=FALLBACK_BODY,
         )
-        return response.content[0].text.strip()
+        return _text(response)
     except Exception as e:
         logger.warning("Detail comment generation failed for activity %s: %s", activity.get("id"), e)
         return None

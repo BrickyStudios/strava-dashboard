@@ -222,5 +222,5 @@ def sync_surfaces(conn, delay_s: float = 1.5) -> None:
         asphalt_pct = round(result.get("asphalt_m", 0) / total * 100) if total else 0
         gravel_pct = round(result.get("gravel_m", 0) / total * 100) if total else 0
         trail_pct = round(result.get("trail_m", 0) / total * 100) if total else 0
-        print(f"  Activity {activity_id}: Asphalt {asphalt_pct}% / Schotter {gravel_pct}% / Trail {trail_pct}%")
+        print(f"  Activity {activity_id}: asphalt {asphalt_pct}% / gravel {gravel_pct}% / Trail {trail_pct}%")
         time.sleep(delay_s)

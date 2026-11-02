@@ -1,6 +1,8 @@
 """Local performance dashboard — FastAPI + Tailwind at localhost:8080."""
 
+import html
 import json
+import re
 import webbrowser
 from datetime import date, timedelta
 from typing import Optional
@@ -13,10 +15,14 @@ from fastapi.responses import HTMLResponse
 
 from lib.db import get_conn, init_db, get_activities, get_my_records, get_all_ranked_efforts
 from lib.grade import compute_grade
-from lib.ai_coach import generate_detail_comment, _get_api_key
+from lib.ai_coach import generate_detail_comment, _get_api_key, _enrich_from_raw
 import anthropic as _anthropic
 
 app = FastAPI()
+
+
+def _short_date(d: date) -> str:
+    return f"{d:%b} {d.day}"  # "May 5"
 
 
 def _iso_week_label(d: date) -> str:
@@ -84,10 +90,16 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
     today = date.today()
     cur_week = _iso_week_label(today)
     prev_monday = today - timedelta(days=today.weekday() + 7)
-    prev_week = _iso_week_label(prev_monday)
 
     cur = buckets.get(cur_week, {"dist": 0, "time": 0, "elev": 0})
-    prev = buckets.get(prev_week, {"dist": 0, "time": 0, "elev": 0})
+    # Compare like with like: last week only up to today's weekday, so Monday doesn't read as -100 %.
+    prev_until = prev_monday + timedelta(days=today.weekday())
+    prev = {"dist": 0.0, "time": 0, "elev": 0.0}
+    for r in row_dicts:
+        if prev_monday <= date.fromisoformat(r["start_date_local"][:10]) <= prev_until:
+            prev["dist"] += r.get("distance_m") or 0
+            prev["time"] += r.get("moving_time_s") or 0
+            prev["elev"] += r.get("elevation_gain_m") or 0
 
     cur_km = cur["dist"] / 1000
     cur_speed = (cur["dist"] / cur["time"] * 3.6) if cur["time"] > 0 else 0
@@ -128,7 +140,7 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
         start = (r.get("start_date_local") or "")[:10]
         try:
             d = date.fromisoformat(start)
-            date_str = f"{d.day:02d}.{d.month:02d}."
+            date_str = _short_date(d)
         except Exception:
             date_str = start
         activity_list.append({
@@ -150,7 +162,7 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
             "avg_speed_kmh": round(cur_eas, 1),
             "elevation_m": round(cur_elev),
             "km_vs_prev_week_pct": _pct_change(cur_km, prev_km),
-            "speed_vs_prev_week_pct": _pct_change(cur_eas, prev_eas),
+            "speed_vs_prev_week_pct": _pct_change(cur_eas, prev_eas) if cur["time"] else None,
             "elevation_vs_prev_week_pct": _pct_change(cur_elev, prev_elev),
             "sparklines": {
                 "km": spark_km,
@@ -211,7 +223,7 @@ def api_activity_detail(activity_id: int):
     start = (r.get("start_date_local") or "")[:10]
     try:
         d = date.fromisoformat(start)
-        date_str = f"{d.day:02d}.{d.month:02d}."
+        date_str = _short_date(d)
     except Exception:
         date_str = start
 
@@ -261,30 +273,17 @@ def api_activity_detail_comment(activity_id: int):
     if r.get("detail_comment"):
         return {"comment": r["detail_comment"]}
 
-    raw = json.loads(r.get("raw_json") or "{}")
-
     sport = r.get("sport_type")
     peers = [dict(a) for a in get_activities(conn, sport_type=sport)]
     grade = compute_grade(r, peers)
-
-    activity_for_comment = {
-        **r,
-        "elev_high_m": raw.get("elev_high"),
-        "elev_low_m": raw.get("elev_low"),
-        "avg_watts": raw.get("average_watts"),
-        "pr_count": raw.get("pr_count") or 0,
-        "achievement_count": raw.get("achievement_count") or 0,
-        "trainer": raw.get("trainer", False),
-        "commute": raw.get("commute", False),
-    }
+    activity_for_comment = _enrich_from_raw(r)
 
     api_key = _get_api_key()
     if not api_key:
         return {"comment": None, "error": "ANTHROPIC_API_KEY not configured"}
 
     client = _anthropic.Anthropic(api_key=api_key)
-    recent_peers = [dict(a) for a in get_activities(conn, sport_type=sport)]
-    comment = generate_detail_comment(activity_for_comment, grade, client, recent_same_sport=recent_peers)
+    comment = generate_detail_comment(activity_for_comment, grade, client, recent_same_sport=peers)
     if comment:
         conn.execute("UPDATE activities SET detail_comment = ? WHERE id = ?", (comment, activity_id))
         conn.commit()
@@ -331,7 +330,7 @@ def api_segments():
     def _fmt_date(iso: str) -> str:
         try:
             d = date.fromisoformat(iso[:10])
-            return f"{d.day:02d}.{d.month:02d}."
+            return _short_date(d)
         except Exception:
             return iso[:10]
 
@@ -381,30 +380,47 @@ def root():
     count = conn.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
     if count == 0:
         return HTMLResponse(_empty_html())
-    return HTMLResponse(_dashboard_html())
+    # sport filter offers what's actually in your data, most frequent first
+    sports = [r[0] for r in conn.execute(
+        "SELECT sport_type FROM activities WHERE sport_type IS NOT NULL "
+        "GROUP BY sport_type ORDER BY COUNT(*) DESC").fetchall()]
+    options = "".join(f'<option value="{html.escape(sp)}">{html.escape(_sport_label(sp))}</option>' for sp in sports)
+    return HTMLResponse(_dashboard_html().replace("<!--SPORT_OPTIONS-->", options))
+
+
+def _sport_label(sport_type: str) -> str:
+    """'GravelRide' -> 'Gravel ride'."""
+    words = re.findall(r"[A-Z][a-z]*|[a-z]+|\d+", sport_type) or [sport_type]
+    return " ".join([words[0]] + [w.lower() for w in words[1:]])
 
 
 def _empty_html() -> str:
     return """<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head><meta charset="UTF-8"><title>Strava Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131316'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23abd600'/%3E%3C/svg%3E">
+
 <script src="https://cdn.tailwindcss.com"></script></head>
 <body class="bg-[#131316] text-[#e4e1e6] flex items-center justify-center min-h-screen">
   <div class="text-center">
-    <h2 class="text-2xl font-semibold mb-4">Keine Daten</h2>
-    <p class="text-[#c4c9ac] mb-2">Sync starten:</p>
+    <h2 class="text-2xl font-semibold mb-4">No data yet</h2>
+    <p class="text-[#c4c9ac] mb-2">Sync your Strava activities:</p>
     <code class="bg-[#1f1f22] px-3 py-1 rounded text-[#abd600]">uv run sync.py</code>
+    <p class="text-[#c4c9ac] mt-6 mb-2">Or try it with made-up demo data:</p>
+    <code class="bg-[#1f1f22] px-3 py-1 rounded text-[#abd600]">uv run dashboard.py --demo</code>
   </div>
 </body></html>"""
 
 
 def _dashboard_html() -> str:
     return """<!DOCTYPE html>
-<html lang="de" class="dark">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gravel Dashboard</title>
+  <title>Strava Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131316'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23abd600'/%3E%3C/svg%3E">
+
   <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0..1&display=swap" rel="stylesheet">
@@ -445,18 +461,17 @@ def _dashboard_html() -> str:
 
   <!-- Header -->
   <header class="sticky top-0 z-10 bg-bg/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
-    <h1 class="text-lg font-bold tracking-tight text-lime">GRAVEL DASHBOARD</h1>
+    <h1 class="text-lg font-bold tracking-tight text-lime">STRAVA DASHBOARD</h1>
     <div class="flex gap-3 items-center">
       <select id="sport" class="bg-surface border border-border text-on-surface text-sm rounded px-2 py-1 focus:outline-none focus:border-lime">
-        <option value="">Alle</option>
-        <option value="GravelRide" selected>Gravel</option>
-        <option value="Run">Laufen</option>
+        <option value="" selected>All sports</option>
+        <!--SPORT_OPTIONS-->
       </select>
       <select id="weeks" class="bg-surface border border-border text-on-surface text-sm rounded px-2 py-1 focus:outline-none focus:border-lime">
-        <option value="4">4 Wochen</option>
-        <option value="12" selected>12 Wochen</option>
-        <option value="26">26 Wochen</option>
-        <option value="52">52 Wochen</option>
+        <option value="4">4 weeks</option>
+        <option value="12" selected>12 weeks</option>
+        <option value="26">26 weeks</option>
+        <option value="52">52 weeks</option>
       </select>
     </div>
   </header>
@@ -470,7 +485,7 @@ def _dashboard_html() -> str:
       </button>
       <button id="tab-segmente" onclick="switchTab('segmente')"
         class="px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-muted hover:text-on-surface transition-colors">
-        Segmente
+        Segments
       </button>
     </div>
   </nav>
@@ -482,12 +497,12 @@ def _dashboard_html() -> str:
     <!-- Weekly Summary -->
     <section>
       <div class="flex justify-between items-baseline mb-3">
-        <h2 class="text-base font-semibold text-on-surface">Wochenzusammenfassung</h2>
+        <h2 class="text-base font-semibold text-on-surface">This week</h2>
         <span id="week-label" class="text-xs text-muted"></span>
       </div>
       <div class="grid grid-cols-3 gap-3">
         <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
-          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Distanz</span>
+          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Distance</span>
           <div class="flex items-baseline gap-1 mb-3">
             <span id="s-km" class="text-3xl font-bold text-on-surface">—</span>
             <span class="text-xs text-muted">km</span>
@@ -496,7 +511,7 @@ def _dashboard_html() -> str:
           <svg id="spark-km" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
         </div>
         <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
-          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Tempo EAS</span>
+          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Speed EAS</span>
           <div class="flex items-baseline gap-1 mb-3">
             <span id="s-speed" class="text-3xl font-bold text-on-surface">—</span>
             <span class="text-xs text-muted">km/h</span>
@@ -505,7 +520,7 @@ def _dashboard_html() -> str:
           <svg id="spark-speed" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
         </div>
         <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
-          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Höhenmeter</span>
+          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Elevation</span>
           <div class="flex items-baseline gap-1 mb-3">
             <span id="s-elev" class="text-3xl font-bold text-on-surface">—</span>
             <span class="text-xs text-muted">m</span>
@@ -518,7 +533,7 @@ def _dashboard_html() -> str:
 
     <!-- Activity Feed -->
     <section>
-      <h2 class="text-base font-semibold text-on-surface mb-3">Letzte Einheiten</h2>
+      <h2 class="text-base font-semibold text-on-surface mb-3">Recent activities</h2>
       <div id="activity-feed" class="space-y-2"></div>
     </section>
 
@@ -528,14 +543,14 @@ def _dashboard_html() -> str:
       <div class="grid grid-cols-2 gap-3">
         <div class="bg-surface-low border border-border rounded-lg p-4">
           <div class="flex justify-between items-center mb-2">
-            <span class="text-xs font-bold uppercase tracking-wider text-muted">Tempo EAS</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-muted">Speed EAS</span>
             <span id="trend-speed-badge" class="text-xs font-semibold text-lime"></span>
           </div>
           <svg id="trend-speed" class="w-full h-16" viewBox="0 0 200 48" preserveAspectRatio="none"></svg>
         </div>
         <div class="bg-surface-low border border-border rounded-lg p-4">
           <div class="flex justify-between items-center mb-2">
-            <span class="text-xs font-bold uppercase tracking-wider text-muted">km / Woche</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-muted">km / week</span>
             <span id="trend-km-badge" class="text-xs font-semibold text-orange"></span>
           </div>
           <svg id="trend-km" class="w-full h-16" viewBox="0 0 200 48" preserveAspectRatio="none"></svg>
@@ -548,13 +563,13 @@ def _dashboard_html() -> str:
     <!-- Segments Tab -->
     <div id="view-segmente" class="hidden space-y-6">
       <section>
-        <h2 class="text-base font-semibold text-on-surface mb-3">Meine Rekorde</h2>
-        <div id="seg-koms"><p class="text-sm text-muted">Wird geladen…</p></div>
+        <h2 class="text-base font-semibold text-on-surface mb-3">My records</h2>
+        <div id="seg-koms"><p class="text-sm text-muted">Loading…</p></div>
       </section>
       <section>
-        <h2 class="text-base font-semibold text-on-surface mb-3">Rekord-Chancen</h2>
-        <p class="text-xs text-muted mb-3">Segmente wo du auf Platz 2–3 bist oder schneller wirst.</p>
-        <div id="seg-opps"><p class="text-sm text-muted">Wird geladen…</p></div>
+        <h2 class="text-base font-semibold text-on-surface mb-3">Record chances</h2>
+        <p class="text-xs text-muted mb-3">Segments where you rank 2nd–3rd or keep getting faster.</p>
+        <div id="seg-opps"><p class="text-sm text-muted">Loading…</p></div>
       </section>
     </div>
 
@@ -562,7 +577,11 @@ def _dashboard_html() -> str:
 
   <script>
     const GRADE_CLASS = {'A+':'grade-ap','A':'grade-a','B+':'grade-bp','B':'grade-b','C':'grade-c'};
-    const SPORT_ICON = {'GravelRide':'directions_bike','Run':'directions_run'};
+    const SPORT_ICON = {
+      GravelRide: 'directions_bike', Ride: 'directions_bike', MountainBikeRide: 'directions_bike',
+      EBikeRide: 'electric_bike', VirtualRide: 'directions_bike', Run: 'directions_run', TrailRun: 'directions_run',
+      Walk: 'directions_walk', Hike: 'hiking', Swim: 'pool'
+    };
 
     function sparklinePath(values, w, h, pad=2) {
       const valid = values.filter(v => v !== null);
@@ -597,7 +616,7 @@ def _dashboard_html() -> str:
       if (!el || pct === null || pct === undefined) { if(el) el.textContent=''; return; }
       const arrow = pct >= 0 ? '↑' : '↓';
       const cls = pct >= 0 ? 'text-lime' : 'text-orange';
-      el.innerHTML = `<span class="${cls}">${arrow} ${Math.abs(pct)}% vs. VW</span>`;
+      el.innerHTML = `<span class="${cls}">${arrow} ${Math.abs(pct)}% vs last week</span>`;
     }
 
     function gradeEl(grade) {
@@ -649,15 +668,15 @@ def _dashboard_html() -> str:
       const feed = document.getElementById('activity-feed');
       feed.innerHTML = d.activities.length
         ? d.activities.map(activityCard).join('')
-        : '<p class="text-muted text-sm">Keine Aktivitäten gefunden.</p>';
+        : '<p class="text-muted text-sm">No activities found.</p>';
 
       // Trends
       renderSparkline('trend-speed', d.trends.speed_eas, '#abd600');
       renderSparkline('trend-km', d.trends.volume_km, '#f18400');
 
-      // Trend badges: compare last vs first non-null
+      // Trend badges: last vs first week. The current week is still running, so it's left out.
       function trendBadge(series, elId, color) {
-        const vals = series.filter(v => v !== null);
+        const vals = series.slice(0, -1).filter(v => v !== null);
         if (vals.length < 2) { document.getElementById(elId).textContent=''; return; }
         const pct = Math.round((vals[vals.length-1] - vals[0]) / vals[0] * 100);
         const el = document.getElementById(elId);
@@ -694,7 +713,7 @@ def _dashboard_html() -> str:
     function initMap(polyline) {
       const container = document.getElementById('panel-map');
       if (!polyline) {
-        container.innerHTML = '<span class="text-xs text-muted">Keine Route verfügbar</span>';
+        container.innerHTML = '<span class="text-xs text-muted">No route available</span>';
         return;
       }
       container.innerHTML = '';
@@ -716,9 +735,9 @@ def _dashboard_html() -> str:
 
     const SURFACE_COLORS = {
       asphalt: { bg: '#4a4a54', label: 'Asphalt',  text: '#c4c9ac' },
-      gravel:  { bg: '#b86b30', label: 'Schotter', text: '#fff' },
+      gravel:  { bg: '#b86b30', label: 'Gravel', text: '#fff' },
       trail:   { bg: '#5a7a3a', label: 'Trail',    text: '#fff' },
-      unknown: { bg: '#353438', label: 'Unbekannt',text: '#8e9379' },
+      unknown: { bg: '#353438', label: 'Unknown',text: '#8e9379' },
     };
 
     function renderSurface(surface) {
@@ -767,9 +786,9 @@ def _dashboard_html() -> str:
       try {
         const r = await fetch(`/api/activity/${id}/detail-comment`);
         const d = await r.json();
-        el.textContent = d.comment || 'Keine Analyse verfügbar.';
+        el.textContent = d.comment || 'No analysis available.';
       } catch {
-        el.textContent = 'Analyse konnte nicht geladen werden.';
+        el.textContent = 'Could not load the analysis.';
       }
     }
 
@@ -783,9 +802,9 @@ def _dashboard_html() -> str:
       document.getElementById('panel-grade').textContent = '';
       document.getElementById('panel-grade').className = 'w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0';
       document.getElementById('panel-stats').innerHTML = '';
-      document.getElementById('panel-map').innerHTML = '<span class="text-xs text-muted">Lädt…</span>';
+      document.getElementById('panel-map').innerHTML = '<span class="text-xs text-muted">Loading…</span>';
       document.getElementById('panel-surface-section').style.display = 'none';
-      document.getElementById('panel-ai').innerHTML = '<span class="animate-pulse">Analyse wird geladen…</span>';
+      document.getElementById('panel-ai').innerHTML = '<span class="animate-pulse">Loading analysis…</span>';
 
       // Slide in
       overlay.classList.remove('hidden');
@@ -798,25 +817,25 @@ def _dashboard_html() -> str:
 
         document.getElementById('panel-name').textContent = d.name;
         document.getElementById('panel-meta').textContent =
-          `${d.date} · ${d.sport_type} · Note ${d.grade}`;
+          `${d.date} · ${sportLabel(d.sport_type)} · Grade ${d.grade}`;
 
         const gradeEl = document.getElementById('panel-grade');
         gradeEl.textContent = d.grade;
         gradeEl.className = `w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${GRADE_CLASS[d.grade] || 'grade-c'}`;
 
         document.getElementById('panel-stats').innerHTML = [
-          statCard('Distanz', d.distance_km, 'km'),
-          statCard('Dauer', d.duration_min, 'min'),
-          statCard('Ø Tempo', d.avg_speed_kmh, 'km/h'),
-          statCard('Tempo EAS', d.eas_kmh, 'km/h'),
-          statCard('Max-Tempo', d.max_speed_kmh, 'km/h'),
-          statCard('Höhenmeter', d.elevation_gain_m, 'm'),
-          statCard('Höchster Punkt', d.elev_high_m != null ? Math.round(d.elev_high_m) : null, 'm'),
-          statCard('Tiefster Punkt', d.elev_low_m != null ? Math.round(d.elev_low_m) : null, 'm'),
-          statCard('Herzfrequenz Ø', d.avg_heartrate != null ? Math.round(d.avg_heartrate) : null, 'bpm'),
-          statCard('Max Herzfrequenz', d.max_heartrate, 'bpm'),
-          statCard('Leistung Ø', d.avg_watts, 'W'),
-          statCard('Energie', d.kilojoules, 'kJ'),
+          statCard('Distance', d.distance_km, 'km'),
+          statCard('Duration', d.duration_min, 'min'),
+          statCard('Avg speed', d.avg_speed_kmh, 'km/h'),
+          statCard('Speed EAS', d.eas_kmh, 'km/h'),
+          statCard('Max speed', d.max_speed_kmh, 'km/h'),
+          statCard('Elevation', d.elevation_gain_m, 'm'),
+          statCard('Highest point', d.elev_high_m != null ? Math.round(d.elev_high_m) : null, 'm'),
+          statCard('Lowest point', d.elev_low_m != null ? Math.round(d.elev_low_m) : null, 'm'),
+          statCard('Avg heart rate', d.avg_heartrate != null ? Math.round(d.avg_heartrate) : null, 'bpm'),
+          statCard('Max heart rate', d.max_heartrate, 'bpm'),
+          statCard('Avg power', d.avg_watts, 'W'),
+          statCard('Energy', d.kilojoules, 'kJ'),
           statCard('Strava PRs', d.pr_count || null, ''),
         ].join('');
 
@@ -827,6 +846,13 @@ def _dashboard_html() -> str:
         console.error(e);
       }
     }
+
+    // 'GravelRide' -> 'Gravel ride', same as the sport filter
+    function sportLabel(t) {
+      const w = (t || '').match(/[A-Z][a-z]*|[a-z]+|\d+/g) || [t];
+      return [w[0], ...w.slice(1).map(x => x.toLowerCase())].join(' ');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
     function closePanel() {
       const panel = document.getElementById('detail-panel');
@@ -847,7 +873,7 @@ def _dashboard_html() -> str:
     }
 
     function segTable(rows, cols) {
-      if (!rows.length) return '<p class="text-sm text-muted">Keine Daten.</p>';
+      if (!rows.length) return '<p class="text-sm text-muted">No data.</p>';
       const head = cols.map(c =>
         `<th class="text-left text-xs font-bold uppercase tracking-wider text-muted px-3 py-2">${c.label}</th>`
       ).join('');
@@ -871,26 +897,26 @@ def _dashboard_html() -> str:
 
         if (!d.records.length && !d.opportunities.length) {
           document.getElementById('seg-koms').innerHTML =
-            '<p class="text-sm text-muted">Keine Segment-Daten. Starte <code class="bg-surface px-1 rounded">uv run sync.py</code> um Daten zu laden.</p>';
+            '<p class="text-sm text-muted">No segment data yet. Run <code class="bg-surface px-1 rounded">uv run sync.py</code> to load it.</p>';
           document.getElementById('seg-opps').innerHTML = '';
           return;
         }
 
         document.getElementById('seg-koms').innerHTML = segTable(d.records, [
           { label: 'Segment',    render: r => escapeHtml(r.segment_name) },
-          { label: 'Distanz',    render: r => fmtDist(r.distance_m) },
-          { label: 'Typ',        render: r => `<span class="font-semibold ${r.record_type === 'KOM' ? 'text-lime' : 'text-amber-400'}">${r.record_type}</span>` },
-          { label: 'Beste Zeit', render: r => fmtTime(r.elapsed_time_s) },
-          { label: 'Datum',      render: r => escapeHtml(r.activity_date || '—') },
+          { label: 'Distance',    render: r => fmtDist(r.distance_m) },
+          { label: 'Type',        render: r => `<span class="font-semibold ${r.record_type === 'KOM' ? 'text-lime' : 'text-amber-400'}">${r.record_type}</span>` },
+          { label: 'Best time', render: r => fmtTime(r.elapsed_time_s) },
+          { label: 'Date',       render: r => escapeHtml(r.activity_date || '—') },
         ]);
 
         document.getElementById('seg-opps').innerHTML = segTable(d.opportunities, [
           { label: 'Segment',    render: r => escapeHtml(r.segment_name) },
-          { label: 'Distanz',    render: r => fmtDist(r.distance_m) },
-          { label: 'Meine Zeit', render: r => fmtTime(r.elapsed_time_s) },
-          { label: 'Platz',      render: r => r.overall_rank ? `#${r.overall_rank}` : '—' },
+          { label: 'Distance',    render: r => fmtDist(r.distance_m) },
+          { label: 'My time', render: r => fmtTime(r.elapsed_time_s) },
+          { label: 'Rank',       render: r => r.overall_rank ? `#${r.overall_rank}` : '—' },
           { label: 'Trend',      render: r => r.is_trending
-              ? `<span class="text-lime font-semibold">↑ ${Math.abs(r.trend_pct)}%</span>`
+              ? `<span class="text-lime font-semibold">${Math.abs(r.trend_pct)}% faster</span>`
               : '<span class="text-muted">—</span>' },
         ]);
       } catch (e) {
@@ -943,21 +969,21 @@ def _dashboard_html() -> str:
       <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Route</h3>
       <div id="panel-map" class="rounded-lg overflow-hidden h-48 bg-surface-low border border-border
                                   flex items-center justify-center text-muted text-xs">
-        <span>Keine Route verfügbar</span>
+        <span>No route available</span>
       </div>
     </div>
 
     <!-- Surface Analysis -->
     <div class="px-4 pb-4" id="panel-surface-section" style="display:none">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Untergrund</h3>
+      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Surface</h3>
       <div id="panel-surface"></div>
     </div>
 
     <!-- AI Analysis -->
     <div class="px-4 pb-8">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">KI-Analyse</h3>
+      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">AI analysis</h3>
       <div id="panel-ai" class="text-sm text-muted italic leading-relaxed">
-        <span class="animate-pulse">Analyse wird geladen…</span>
+        <span class="animate-pulse">Loading analysis…</span>
       </div>
     </div>
   </aside>
@@ -965,6 +991,24 @@ def _dashboard_html() -> str:
 </html>"""
 
 
+def main() -> None:
+    import argparse
+    import os
+    parser = argparse.ArgumentParser(description="Local Strava dashboard")
+    parser.add_argument("--demo", action="store_true", help="Run with made-up demo data, no Strava account needed")
+    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--no-browser", action="store_true")
+    args = parser.parse_args()
+    if args.demo:
+        from lib.demo import DEMO_DB, build_demo_db
+        build_demo_db(DEMO_DB)  # rebuilt each start so the dates stay recent
+        os.environ["STRAVA_DASHBOARD_DB"] = str(DEMO_DB)
+        print(f"Demo mode: {DEMO_DB}")
+    url = f"http://localhost:{args.port}"
+    if not args.no_browser:
+        webbrowser.open(url)
+    uvicorn.run(app, host="127.0.0.1", port=args.port)
+
+
 if __name__ == "__main__":
-    webbrowser.open("http://localhost:8080")
-    uvicorn.run(app, host="127.0.0.1", port=8080)
+    main()
