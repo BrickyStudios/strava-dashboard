@@ -27,7 +27,7 @@ def refresh_tokens(env_path: Path | None = None) -> str:
     envs = dotenv_values(env_path)
     missing = [k for k in ("STRAVA_CLIENT_ID", "STRAVA_CLIENT_SECRET", "STRAVA_REFRESH_TOKEN") if not envs.get(k)]
     if missing:
-        raise SystemExit(f"Missing in {env_path}: {', '.join(missing)}. Copy .env.example to .env and fill it in.")
+        raise SystemExit(f"Missing in {env_path}: {', '.join(missing)}. Run `uv run auth.py` first.")
     resp = httpx.post(STRAVA_TOKEN_URL, data={
         "client_id": envs["STRAVA_CLIENT_ID"],
         "client_secret": envs["STRAVA_CLIENT_SECRET"],

@@ -1,11 +1,12 @@
 [project]
-name = "strava-mcp"
-version = "0.1.0"
-description = "A simple MCP for Strava."
+name = "strava-dashboard"
+version = "1.0.0"
+description = "Local Strava dashboard with activity grades, AI coach comments, segment records and route maps."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
-authors = [{ name = "Jonathan Carlton" }]
+# MCP server and Strava client started as JonoCX/strava-mcp (Apache-2.0); dashboard by BrickyStudios
+authors = [{ name = "BrickyStudios" }, { name = "Jonathan Carlton" }]
 dependencies = [
     "anthropic>=0.40.0",
     "fastapi>=0.115.0",
