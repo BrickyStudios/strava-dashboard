@@ -40,11 +40,8 @@ def test_api_summary_fields(db_with_many_activities):
     s = resp.json()["summary"]
     for field in ("total_km", "avg_speed_kmh", "elevation_m",
                   "km_vs_prev_week_pct", "speed_vs_prev_week_pct",
-                  "elevation_vs_prev_week_pct", "sparklines"):
+                  "elevation_vs_prev_week_pct"):
         assert field in s, f"Missing field: {field}"
-    for key in ("km", "speed_eas", "elevation"):
-        assert key in s["sparklines"]
-        assert len(s["sparklines"][key]) == 8
 
 
 def test_api_activities_have_grade_and_comment(db_with_many_activities):

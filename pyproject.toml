@@ -1,6 +1,6 @@
 [project]
 name = "strava-dashboard"
-version = "1.0.0"
+version = "1.1.0"
 description = "Local Strava dashboard with activity grades, AI coach comments, segment records and route maps."
 readme = "README.md"
 requires-python = ">=3.12"

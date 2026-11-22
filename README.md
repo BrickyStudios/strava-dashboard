@@ -52,7 +52,7 @@ Optional: put an [Anthropic API key](https://console.anthropic.com/) into `.env`
 
 ## What it shows
 
-**This week.** Distance, speed and elevation, each compared with the same weekdays last week, so a Monday doesn't show up as "-100 %". Sparklines for the last eight weeks.
+**This week.** Distance, speed and elevation, each compared with the same weekdays last week, so a Monday doesn't show up as "-100 %".
 
 **Recent activities.** Every activity gets a grade from A+ to C and a one-sentence coach comment (Claude Haiku 5.5, written once after each sync and cached).
 
@@ -68,7 +68,7 @@ Optional: put an [Anthropic API key](https://console.anthropic.com/) into `.env`
   <img src="docs/images/segments.png" width="860" alt="Segments tab: table of my records with KOM badges and best times, table of record chances with rank and how much faster you got">
 </p>
 
-**Trends.** Weekly speed and volume over 4, 12, 26 or 52 weeks, filtered by sport. The sport filter lists the sports in your own data.
+**Trends.** Distance per week as bars, with the current week highlighted and speed drawn underneath. Pick 4, 12, 26 or 52 weeks and filter by sport. The sport filter lists the sports in your own data.
 
 ## How grades work
 

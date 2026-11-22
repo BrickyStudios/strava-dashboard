@@ -113,23 +113,6 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
     prev_eas = prev_speed + prev_hm_per_km * 0.04
     prev_elev = prev["elev"]
 
-    # --- Sparklines: last 8 weeks ---
-    spark_labels = _trailing_weeks(8)
-    _, spark_buckets = _week_buckets(rows, 8)
-    spark_km, spark_eas, spark_elev = [], [], []
-    for lbl in spark_labels:
-        b = spark_buckets.get(lbl)
-        if b and b["time"] > 0:
-            spd = b["dist"] / b["time"] * 3.6
-            hm_pk = b["elev"] / (b["dist"] / 1000) if b["dist"] > 0 else 0
-            spark_km.append(round(b["dist"] / 1000, 1))
-            spark_eas.append(round(spd + hm_pk * 0.04, 2))
-            spark_elev.append(round(b["elev"], 0))
-        else:
-            spark_km.append(None)
-            spark_eas.append(None)
-            spark_elev.append(None)
-
     # --- Activities: 10 most recent ---
     recent = sorted(row_dicts, key=lambda r: r.get("start_date_local") or "", reverse=True)[:10]
     activity_list = []
@@ -164,11 +147,6 @@ def api_data(sport_type: Optional[str] = None, weeks: int = 12):
             "km_vs_prev_week_pct": _pct_change(cur_km, prev_km),
             "speed_vs_prev_week_pct": _pct_change(cur_eas, prev_eas) if cur["time"] else None,
             "elevation_vs_prev_week_pct": _pct_change(cur_elev, prev_elev),
-            "sparklines": {
-                "km": spark_km,
-                "speed_eas": spark_eas,
-                "elevation": spark_elev,
-            },
         },
         "activities": activity_list,
         "trends": {
@@ -398,31 +376,31 @@ def _empty_html() -> str:
     return """<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Strava Dashboard</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131316'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23abd600'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171815'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23C6F432'/%3E%3C/svg%3E">
 
 <script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-[#0C0D0B] text-[#F4F1EA] flex items-center justify-center min-h-screen">
+<body class="bg-[#0C0D0B] text-[#F4F1EA] flex items-center justify-center min-h-screen" style="font-family: system-ui, sans-serif">
   <div class="text-center">
-    <h2 class="text-2xl font-semibold mb-4">No data yet</h2>
+    <h2 class="text-2xl font-medium mb-4">No data yet</h2>
     <p class="text-[#A6A49D] mb-2">Sync your Strava activities:</p>
-    <code class="bg-[#171815] px-3 py-1 rounded text-[#C6F432]">uv run sync.py</code>
+    <code class="bg-[#171815] px-3 py-1 rounded-md">uv run sync.py</code>
     <p class="text-[#A6A49D] mt-6 mb-2">Or try it with made-up demo data:</p>
-    <code class="bg-[#171815] px-3 py-1 rounded text-[#C6F432]">uv run dashboard.py --demo</code>
+    <code class="bg-[#171815] px-3 py-1 rounded-md">uv run dashboard.py --demo</code>
   </div>
 </body></html>"""
 
 
 def _dashboard_html() -> str:
-    return """<!DOCTYPE html>
+    return r"""<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Strava Dashboard</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131316'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23abd600'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171815'/%3E%3Cpath d='M6 24l7-14 5 9 3-5 5 10z' fill='%23C6F432'/%3E%3C/svg%3E">
 
   <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Big+Shoulders+Display:wght@600&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0..1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -439,142 +417,139 @@ def _dashboard_html() -> str:
             'border':   '#2C2D29',
             'on-surface': '#F4F1EA',
             'muted':    '#A6A49D',
+            'faint':    '#8A8881',
             'lime':     '#C6F432',
-            'lime-bright': '#D8FF5C',
-            'orange':   '#FF5B1F',
           },
-          fontFamily: { sans: ['Archivo', 'system-ui', 'sans-serif'], display: ['"Big Shoulders Display"', 'Impact', 'sans-serif'] },
+          fontFamily: { sans: ['Archivo', 'system-ui', 'sans-serif'] },
+          transitionTimingFunction: { DEFAULT: 'cubic-bezier(0.22, 1, 0.36, 1)' },
         }
       }
     }
   </script>
   <style>
-    /* FitShare look: race-bib numbers in Big Shoulders, text in Archivo, volt on ink */
-    body { font-family: 'Archivo', system-ui, sans-serif; }
-    h2, .text-3xl, .grade-ap, .grade-a, .grade-bp, .grade-b, .grade-c { font-family: 'Big Shoulders Display', Impact, sans-serif; }
-    h2 { text-transform: uppercase; font-weight: 800; letter-spacing: .02em; font-size: 1.6rem; }
-    section + section h2, div + h2 { margin-top: 2rem; }
-    .text-3xl { font-size: 2.9rem; line-height: 1; font-weight: 800; letter-spacing: -.01em; }
-    .grade-ap, .grade-a, .grade-bp, .grade-b, .grade-c { font-size: 1rem; font-weight: 800; }
-    .grade-ap { background:#D8FF5C; color:#0C0D0B; }
-    .grade-a  { background:#9DC22A; color:#0C0D0B; }
-    .grade-bp { background:#FF5B1F; color:#0C0D0B; }
-    .grade-b  { background:#22231F; color:#F4F1EA; border:1px solid #2C2D29; }
-    .grade-c  { background:#121310; color:#7C7A74; border:1px solid #2C2D29; }
+    body { font-family: 'Archivo', system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+    /* race-bib figures: Big Shoulders is for numbers only, words stay in Archivo */
+    .fig { font-family: 'Big Shoulders Display', Impact, sans-serif; font-weight: 600; line-height: 1; }
+    /* grades step down the ink ramp; only A+ gets the volt */
+    .grade-ap { background:#C6F432; color:#0C0D0B; }
+    .grade-a  { background:#22231F; color:#F4F1EA; box-shadow: inset 0 0 0 1px #2C2D29; }
+    .grade-bp { background:#22231F; color:#A6A49D; box-shadow: inset 0 0 0 1px #2C2D29; }
+    .grade-b  { color:#A6A49D; box-shadow: inset 0 0 0 1px #2C2D29; }
+    .grade-c  { color:#8A8881; box-shadow: inset 0 0 0 1px #2C2D29; }
+    .ax { fill:#8A8881; font-size:11px; }
+    :focus-visible { outline: 2px solid #C6F432; outline-offset: 2px; }
   </style>
 </head>
 <body class="bg-bg text-on-surface min-h-screen">
 
   <!-- Header -->
-  <header class="sticky top-0 z-10 bg-bg/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
-    <h1 class="text-sm font-extrabold tracking-[.3em] text-on-surface flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-lime inline-block"></span>STRAVA DASHBOARD</h1>
-    <div class="flex gap-3 items-center">
-      <select id="sport" class="bg-surface border border-border text-on-surface text-sm rounded px-2 py-1 focus:outline-none focus:border-lime">
-        <option value="" selected>All sports</option>
-        <!--SPORT_OPTIONS-->
-      </select>
-      <select id="weeks" class="bg-surface border border-border text-on-surface text-sm rounded px-2 py-1 focus:outline-none focus:border-lime">
-        <option value="4">4 weeks</option>
-        <option value="12" selected>12 weeks</option>
-        <option value="26">26 weeks</option>
-        <option value="52">52 weeks</option>
-      </select>
+  <header class="sticky top-0 z-10 bg-bg border-b border-border">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <h1 class="flex items-center gap-2 text-base font-semibold text-on-surface">
+        <svg class="w-5 h-5 text-lime" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 24l7-14 5 9 3-5 5 10z" fill="currentColor"/></svg>
+        Strava Dashboard
+      </h1>
+      <div class="flex gap-2 w-full sm:w-auto">
+        <select id="sport" aria-label="Sport" class="flex-1 sm:flex-none h-9 bg-surface border border-border text-on-surface text-sm rounded-lg pl-3 pr-8 focus:outline-none focus:ring-1 focus:ring-lime focus:border-lime">
+          <option value="" selected>All sports</option>
+          <!--SPORT_OPTIONS-->
+        </select>
+        <select id="weeks" aria-label="Time range" class="flex-1 sm:flex-none h-9 bg-surface border border-border text-on-surface text-sm rounded-lg pl-3 pr-8 focus:outline-none focus:ring-1 focus:ring-lime focus:border-lime">
+          <option value="4">4 weeks</option>
+          <option value="12" selected>12 weeks</option>
+          <option value="26">26 weeks</option>
+          <option value="52">52 weeks</option>
+        </select>
+      </div>
     </div>
   </header>
 
   <!-- Tab bar -->
-  <nav class="border-b border-border px-4">
-    <div class="max-w-3xl mx-auto flex">
+  <nav class="border-b border-border">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 flex gap-6">
       <button id="tab-dashboard" onclick="switchTab('dashboard')"
-        class="px-4 py-3 text-sm font-semibold border-b-2 border-lime text-lime transition-colors">
+        class="py-3 text-sm font-medium border-b-2 border-lime text-on-surface transition-colors">
         Dashboard
       </button>
       <button id="tab-segmente" onclick="switchTab('segmente')"
-        class="px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-muted hover:text-on-surface transition-colors">
+        class="py-3 text-sm font-medium border-b-2 border-transparent text-muted hover:text-on-surface transition-colors">
         Segments
       </button>
     </div>
   </nav>
 
-  <main class="max-w-3xl mx-auto px-4 py-6 space-y-8">
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
 
-    <div id="view-dashboard">
+    <div id="view-dashboard" class="space-y-10">
 
     <!-- Weekly Summary -->
     <section>
       <div class="flex justify-between items-baseline mb-3">
-        <h2 class="text-base font-semibold text-on-surface">This week</h2>
-        <span id="week-label" class="text-xs text-muted"></span>
+        <h2 class="text-lg font-medium text-on-surface">This week</h2>
+        <span id="week-label" class="text-xs text-faint"></span>
       </div>
       <div class="grid grid-cols-3 gap-3">
-        <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
-          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Distance</span>
-          <div class="flex items-baseline gap-1 mb-3">
-            <span id="s-km" class="text-3xl font-bold text-on-surface">—</span>
+        <div class="bg-surface-low border border-border rounded-xl p-4 sm:p-5">
+          <p class="text-sm text-muted">Distance</p>
+          <p class="mt-3 flex items-baseline gap-1">
+            <span id="s-km" class="fig text-4xl sm:text-[2.75rem] text-on-surface">—</span>
             <span class="text-xs text-muted">km</span>
-          </div>
-          <div id="badge-km" class="text-xs mb-2"></div>
-          <svg id="spark-km" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
+          </p>
+          <p id="badge-km" class="mt-3 text-xs text-muted"></p>
         </div>
-        <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
-          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Speed EAS</span>
-          <div class="flex items-baseline gap-1 mb-3">
-            <span id="s-speed" class="text-3xl font-bold text-on-surface">—</span>
+        <div class="bg-surface-low border border-border rounded-xl p-4 sm:p-5">
+          <p class="text-sm text-muted">Speed EAS</p>
+          <p class="mt-3 flex items-baseline gap-1">
+            <span id="s-speed" class="fig text-4xl sm:text-[2.75rem] text-on-surface">—</span>
             <span class="text-xs text-muted">km/h</span>
-          </div>
-          <div id="badge-speed" class="text-xs mb-2"></div>
-          <svg id="spark-speed" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
+          </p>
+          <p id="badge-speed" class="mt-3 text-xs text-muted"></p>
         </div>
-        <div class="bg-surface-low border border-border rounded-lg p-4 flex flex-col">
-          <span class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Elevation</span>
-          <div class="flex items-baseline gap-1 mb-3">
-            <span id="s-elev" class="text-3xl font-bold text-on-surface">—</span>
+        <div class="bg-surface-low border border-border rounded-xl p-4 sm:p-5">
+          <p class="text-sm text-muted">Elevation</p>
+          <p class="mt-3 flex items-baseline gap-1">
+            <span id="s-elev" class="fig text-4xl sm:text-[2.75rem] text-on-surface">—</span>
             <span class="text-xs text-muted">m</span>
-          </div>
-          <div id="badge-elev" class="text-xs mb-2"></div>
-          <svg id="spark-elev" class="mt-auto w-full h-8" viewBox="0 0 80 24" preserveAspectRatio="none"></svg>
+          </p>
+          <p id="badge-elev" class="mt-3 text-xs text-muted"></p>
         </div>
       </div>
     </section>
 
     <!-- Activity Feed -->
     <section>
-      <h2 class="text-base font-semibold text-on-surface mb-3">Recent activities</h2>
+      <h2 class="text-lg font-medium text-on-surface mb-3">Recent activities</h2>
       <div id="activity-feed" class="space-y-2"></div>
     </section>
 
-    <!-- Trends -->
+    <!-- Trends: one main chart, distance per week, with speed underneath on the same weeks -->
     <section>
-      <h2 class="text-base font-semibold text-on-surface mb-3">Trends</h2>
-      <div class="grid grid-cols-2 gap-3">
-        <div class="bg-surface-low border border-border rounded-lg p-4">
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-xs font-bold uppercase tracking-wider text-muted">Speed EAS</span>
-            <span id="trend-speed-badge" class="text-xs font-semibold text-lime"></span>
-          </div>
-          <svg id="trend-speed" class="w-full h-16" viewBox="0 0 200 48" preserveAspectRatio="none"></svg>
+      <h2 class="text-lg font-medium text-on-surface mb-3">Trends</h2>
+      <div class="bg-surface-low border border-border rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-baseline gap-3">
+          <p class="text-sm text-muted">Distance per week</p>
+          <p id="trend-km-badge" class="text-xs text-muted"></p>
         </div>
-        <div class="bg-surface-low border border-border rounded-lg p-4">
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-xs font-bold uppercase tracking-wider text-muted">km / week</span>
-            <span id="trend-km-badge" class="text-xs font-semibold text-orange"></span>
-          </div>
-          <svg id="trend-km" class="w-full h-16" viewBox="0 0 200 48" preserveAspectRatio="none"></svg>
+        <svg id="trend-km" class="block w-full h-56 mt-3" role="img" aria-label="Distance per week"></svg>
+        <div class="flex justify-between items-baseline gap-3 mt-6">
+          <p class="text-sm text-muted">Speed EAS</p>
+          <p id="trend-speed-badge" class="text-xs text-muted"></p>
         </div>
+        <svg id="trend-speed" class="block w-full h-14 mt-2" role="img" aria-label="Speed EAS per week"></svg>
       </div>
     </section>
 
     </div><!-- /view-dashboard -->
 
     <!-- Segments Tab -->
-    <div id="view-segmente" class="hidden space-y-6">
+    <div id="view-segmente" class="hidden space-y-10">
       <section>
-        <h2 class="text-base font-semibold text-on-surface mb-3">My records</h2>
+        <h2 class="text-lg font-medium text-on-surface mb-3">My records</h2>
         <div id="seg-koms"><p class="text-sm text-muted">Loading…</p></div>
       </section>
       <section>
-        <h2 class="text-base font-semibold text-on-surface mb-3">Record chances</h2>
-        <p class="text-xs text-muted mb-3">Segments where you rank 2nd–3rd or keep getting faster.</p>
+        <h2 class="text-lg font-medium text-on-surface mb-1">Record chances</h2>
+        <p class="text-sm text-muted mb-3">Segments where you rank 2nd–3rd or keep getting faster</p>
         <div id="seg-opps"><p class="text-sm text-muted">Loading…</p></div>
       </section>
     </div>
@@ -588,46 +563,21 @@ def _dashboard_html() -> str:
       EBikeRide: 'electric_bike', VirtualRide: 'directions_bike', Run: 'directions_run', TrailRun: 'directions_run',
       Walk: 'directions_walk', Hike: 'hiking', Swim: 'pool'
     };
+    const VOLT = '#C6F432', BAR = '#62635C', GRID = '#2C2D29', LINE = '#A6A49D';
 
-    function sparklinePath(values, w, h, pad=2) {
-      const valid = values.filter(v => v !== null);
-      if (!valid.length) return '';
-      const mn = Math.min(...valid), mx = Math.max(...valid);
-      const range = mx - mn || 1;
-      const step = w / (values.length - 1 || 1);
-      const pts = values.map((v, i) => {
-        if (v === null) return null;
-        return [i * step, h - pad - ((v - mn) / range) * (h - pad * 2)];
-      });
-      let d = '', prev = null;
-      for (const pt of pts) {
-        if (!pt) { prev = null; continue; }
-        d += prev ? `L${pt[0].toFixed(1)},${pt[1].toFixed(1)}` : `M${pt[0].toFixed(1)},${pt[1].toFixed(1)}`;
-        prev = pt;
-      }
-      return d;
-    }
-
-    function renderSparkline(svgId, values, color) {
-      const svg = document.getElementById(svgId);
-      if (!svg) return;
-      const vb = svg.getAttribute('viewBox').split(' ');
-      const w = +vb[2], h = +vb[3];
-      const d = sparklinePath(values, w, h);
-      svg.innerHTML = d ? `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>` : '';
-    }
+    // one decimal everywhere, so 13 km/h reads 13.0 like its neighbours
+    const f1 = v => v == null ? '—' : Number(v).toFixed(1);
+    const wk = label => label.split('-')[1];  // '2026-W47' -> 'W47'
 
     function pctBadge(pct, elId) {
       const el = document.getElementById(elId);
       if (!el || pct === null || pct === undefined) { if(el) el.textContent=''; return; }
-      const arrow = pct >= 0 ? '↑' : '↓';
-      const cls = pct >= 0 ? 'text-lime' : 'text-orange';
-      el.innerHTML = `<span class="${cls}">${arrow} ${Math.abs(pct)}% vs last week</span>`;
+      el.textContent = `${pct >= 0 ? '↑' : '↓'} ${Math.abs(pct)}% vs last week`;
     }
 
     function gradeEl(grade) {
       const cls = GRADE_CLASS[grade] || 'grade-c';
-      return `<div class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${cls}">${grade}</div>`;
+      return `<span class="w-9 h-9 rounded-md flex items-center justify-center fig text-lg shrink-0 ${cls}">${grade}</span>`;
     }
 
     function escapeHtml(s) {
@@ -637,19 +587,82 @@ def _dashboard_html() -> str:
     function activityCard(act) {
       const icon = SPORT_ICON[act.sport_type] || 'fitness_center';
       const comment = act.ai_comment
-        ? `<p class="text-xs text-muted italic mt-1">${escapeHtml(act.ai_comment)}</p>` : '';
+        ? `<span class="block text-[13px] leading-5 text-muted mt-1">${escapeHtml(act.ai_comment)}</span>` : '';
       return `
-        <div class="bg-surface-low border border-border rounded-lg p-3 flex items-start gap-3 hover:border-lime/30 transition-colors cursor-pointer" onclick="openDetail(${act.id})">
-          <div class="w-10 h-10 rounded-full bg-surface-high flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined text-muted text-lg">${icon}</span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-on-surface truncate">${escapeHtml(act.name)}</p>
-            <p class="text-xs text-muted">${act.date} · ${act.distance_km} km · ${act.duration_min} min · ${act.avg_speed_kmh} km/h EAS</p>
+        <button type="button" class="w-full text-left bg-surface-low border border-border rounded-xl p-4 flex items-start gap-3 hover:bg-surface transition-colors" onclick="openDetail(${act.id})">
+          <span class="w-10 h-10 rounded-full bg-surface-high flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-muted text-[20px]">${icon}</span>
+          </span>
+          <span class="flex-1 min-w-0">
+            <span class="block text-sm font-medium text-on-surface truncate">${escapeHtml(act.name)}</span>
+            <span class="block text-xs text-muted mt-0.5">${act.date} · ${f1(act.distance_km)} km · ${act.duration_min} min · ${f1(act.avg_speed_kmh)} km/h EAS</span>
             ${comment}
-          </div>
+          </span>
           ${gradeEl(act.grade)}
-        </div>`;
+        </button>`;
+    }
+
+    function niceMax(v) {
+      const p = 10 ** Math.floor(Math.log10(v));
+      return [1, 2, 2.5, 5, 10].find(m => m * p >= v) * p;
+    }
+
+    // Both trend charts share the week columns; drawn at real pixel size so text stays crisp.
+    let _trends = null;
+    function drawTrends() {
+      if (!_trends) return;
+      const { labels, volume_km: km, speed_eas: eas } = _trends;
+      const n = labels.length, last = n - 1, LEFT = 52;
+
+      const bars = document.getElementById('trend-km');
+      const W = bars.clientWidth, H = bars.clientHeight, BOTTOM = 22;
+      bars.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      const slot = (W - LEFT) / n, bw = Math.max(2, Math.min(28, slot * 0.6));
+      const max = niceMax(Math.max(1, ...km.map(v => v || 0)));
+      const y = v => (H - BOTTOM) - v / max * (H - BOTTOM - 8);
+      const every = Math.ceil(n / Math.max(1, Math.floor((W - LEFT) / 44)));
+      let s = '';
+      for (const g of [0, max / 2, max]) {
+        s += `<line x1="${LEFT}" x2="${W}" y1="${y(g)}" y2="${y(g)}" stroke="${GRID}"/>`
+           + `<text x="${LEFT - 8}" y="${y(g) + 4}" text-anchor="end" class="ax">${g} km</text>`;
+      }
+      km.forEach((v, i) => {
+        const x = LEFT + slot * i + slot / 2;
+        if (v) s += `<rect x="${x - bw / 2}" y="${y(v)}" width="${bw}" height="${(H - BOTTOM) - y(v)}" rx="2" fill="${i === last ? VOLT : BAR}"><title>${wk(labels[i])}: ${f1(v)} km</title></rect>`;
+        if ((last - i) % every === 0) s += `<text x="${x}" y="${H - 4}" text-anchor="middle" class="ax">${wk(labels[i])}</text>`;
+      });
+      bars.innerHTML = s;
+
+      const line = document.getElementById('trend-speed');
+      const LW = line.clientWidth, LH = line.clientHeight;
+      line.setAttribute('viewBox', `0 0 ${LW} ${LH}`);
+      const valid = eas.filter(v => v !== null);
+      if (!valid.length) { line.innerHTML = ''; return; }
+      const lo = Math.min(...valid), hi = Math.max(...valid), range = hi - lo || 1;
+      const ly = v => LH - 6 - (v - lo) / range * (LH - 12);
+      const lslot = (LW - LEFT) / n;
+      let d = '', pen = false, t = '';
+      eas.forEach((v, i) => {
+        if (v === null) { pen = false; return; }
+        d += `${pen ? 'L' : 'M'}${(LEFT + lslot * i + lslot / 2).toFixed(1)},${ly(v).toFixed(1)}`;
+        pen = true;
+      });
+      t += `<text x="${LEFT - 8}" y="${ly(hi) + 4}" text-anchor="end" class="ax">${f1(hi)}</text>`
+         + `<text x="${LEFT - 8}" y="${ly(lo) + 4}" text-anchor="end" class="ax">${f1(lo)}</text>`;
+      const cur = eas[last] !== null
+        ? `<circle cx="${LEFT + lslot * last + lslot / 2}" cy="${ly(eas[last])}" r="3.5" fill="${VOLT}"/>` : '';
+      line.innerHTML = `${t}<path d="${d}" fill="none" stroke="${LINE}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>${cur}`;
+    }
+    window.addEventListener('resize', drawTrends);
+
+    // Trend badge: last full week vs the first week with data. The current week is still running, so it's left out.
+    function trendBadge(series, labels, elId) {
+      const el = document.getElementById(elId);
+      const idx = series.slice(0, -1).map((v, i) => v !== null ? i : -1).filter(i => i >= 0);
+      if (idx.length < 2) { el.textContent = ''; return; }
+      const a = idx[0], b = idx[idx.length - 1];
+      const pct = Math.round((series[b] - series[a]) / series[a] * 100);
+      el.textContent = `${pct >= 0 ? '↑' : '↓'} ${Math.abs(pct)}% · ${wk(labels[b])} vs ${wk(labels[a])}`;
     }
 
     async function load() {
@@ -660,38 +673,24 @@ def _dashboard_html() -> str:
 
       // Summary
       document.getElementById('week-label').textContent = d.week_label;
-      document.getElementById('s-km').textContent = d.summary.total_km ?? '—';
-      document.getElementById('s-speed').textContent = d.summary.avg_speed_kmh ?? '—';
+      document.getElementById('s-km').textContent = f1(d.summary.total_km);
+      document.getElementById('s-speed').textContent = f1(d.summary.avg_speed_kmh);
       document.getElementById('s-elev').textContent = d.summary.elevation_m ?? '—';
       pctBadge(d.summary.km_vs_prev_week_pct, 'badge-km');
       pctBadge(d.summary.speed_vs_prev_week_pct, 'badge-speed');
       pctBadge(d.summary.elevation_vs_prev_week_pct, 'badge-elev');
-      renderSparkline('spark-km', d.summary.sparklines.km, '#C6F432');
-      renderSparkline('spark-speed', d.summary.sparklines.speed_eas, '#C6F432');
-      renderSparkline('spark-elev', d.summary.sparklines.elevation, '#C6F432');
 
       // Activities
       const feed = document.getElementById('activity-feed');
       feed.innerHTML = d.activities.length
         ? d.activities.map(activityCard).join('')
-        : '<p class="text-muted text-sm">No activities found.</p>';
+        : '<p class="text-muted text-sm">No activities found</p>';
 
       // Trends
-      renderSparkline('trend-speed', d.trends.speed_eas, '#C6F432');
-      renderSparkline('trend-km', d.trends.volume_km, '#FF5B1F');
-
-      // Trend badges: last vs first week. The current week is still running, so it's left out.
-      function trendBadge(series, elId, color) {
-        const vals = series.slice(0, -1).filter(v => v !== null);
-        if (vals.length < 2) { document.getElementById(elId).textContent=''; return; }
-        const pct = Math.round((vals[vals.length-1] - vals[0]) / vals[0] * 100);
-        const el = document.getElementById(elId);
-        const arrow = pct >= 0 ? '↑' : '↓';
-        el.textContent = `${arrow} ${Math.abs(pct)}%`;
-        el.className = `text-xs font-semibold ${color}`;
-      }
-      trendBadge(d.trends.speed_eas, 'trend-speed-badge', 'text-lime');
-      trendBadge(d.trends.volume_km, 'trend-km-badge', 'text-orange');
+      _trends = d.trends;
+      drawTrends();
+      trendBadge(d.trends.volume_km, d.trends.labels, 'trend-km-badge');
+      trendBadge(d.trends.speed_eas, d.trends.labels, 'trend-speed-badge');
     }
 
     document.getElementById('sport').addEventListener('change', load);
@@ -726,24 +725,28 @@ def _dashboard_html() -> str:
       if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
       const coords = decodePolyline(polyline);
       _leafletMap = L.map(container, { zoomControl: false });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(_leafletMap);
-      const line = L.polyline(coords, { color: '#C6F432', weight: 3 }).addTo(_leafletMap);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(_leafletMap);
+      // dark casing under the volt line, so it reads on the light green tiles
+      L.polyline(coords, { color: '#0C0D0B', weight: 6, opacity: 0.55 }).addTo(_leafletMap);
+      const line = L.polyline(coords, { color: VOLT, weight: 3 }).addTo(_leafletMap);
       _leafletMap.fitBounds(line.getBounds(), { padding: [8, 8] });
     }
 
     function statCard(label, value, unit='') {
       if (value === null || value === undefined) return '';
-      return `<div class="bg-surface-low border border-border rounded-lg p-3">
-        <p class="text-xs text-muted mb-1">${label}</p>
-        <p class="font-display text-2xl font-extrabold text-on-surface leading-none mt-1">${value}<span class="font-sans text-xs font-medium text-muted ml-1">${unit}</span></p>
+      return `<div class="bg-surface-low border border-border rounded-xl p-3">
+        <p class="text-xs text-muted">${label}</p>
+        <p class="mt-2 flex items-baseline gap-1"><span class="fig text-2xl text-on-surface">${value}</span><span class="text-xs text-muted">${unit}</span></p>
       </div>`;
     }
 
     const SURFACE_COLORS = {
-      asphalt: { bg: '#4a4a54', label: 'Asphalt',  text: '#A6A49D' },
-      gravel:  { bg: '#b86b30', label: 'Gravel', text: '#fff' },
-      trail:   { bg: '#5a7a3a', label: 'Trail',    text: '#fff' },
-      unknown: { bg: '#2C2D29', label: 'Unknown',text: '#7C7A74' },
+      asphalt: { bg: '#4a4a54', label: 'Asphalt' },
+      gravel:  { bg: '#b86b30', label: 'Gravel' },
+      trail:   { bg: '#5a7a3a', label: 'Trail' },
+      unknown: { bg: '#2C2D29', label: 'Unknown' },
     };
 
     function renderSurface(surface) {
@@ -773,7 +776,7 @@ def _dashboard_html() -> str:
         const km = (s.m / 1000).toFixed(1);
         return `<div class="flex items-center gap-2 text-xs">
           <div class="w-3 h-3 rounded-sm shrink-0" style="background:${c.bg}"></div>
-          <span class="text-on-surface font-medium w-20">${c.label}</span>
+          <span class="text-on-surface w-20">${c.label}</span>
           <span class="text-muted">${pct}%</span>
           <span class="text-muted ml-auto">${km} km</span>
         </div>`;
@@ -781,9 +784,9 @@ def _dashboard_html() -> str:
 
       const analyzed_km = (total / 1000).toFixed(1);
       container.innerHTML = `
-        <div class="w-full h-4 rounded overflow-hidden flex mb-3 bg-surface-high">${barSegs}</div>
-        <div class="space-y-1.5">${legend}</div>
-        <p class="text-xs text-muted mt-2">${analyzed_km} km analysiert</p>`;
+        <div class="w-full h-3 rounded-sm overflow-hidden flex mb-3 bg-surface-high">${barSegs}</div>
+        <div class="space-y-2">${legend}</div>
+        <p class="text-xs text-faint mt-3">${analyzed_km} km analyzed</p>`;
       section.style.display = 'block';
     }
 
@@ -792,9 +795,9 @@ def _dashboard_html() -> str:
       try {
         const r = await fetch(`/api/activity/${id}/detail-comment`);
         const d = await r.json();
-        el.textContent = d.comment || 'No analysis available.';
+        el.textContent = d.comment || 'No analysis available';
       } catch {
-        el.textContent = 'Could not load the analysis.';
+        el.textContent = 'Could not load the analysis';
       }
     }
 
@@ -806,11 +809,11 @@ def _dashboard_html() -> str:
       document.getElementById('panel-name').textContent = '…';
       document.getElementById('panel-meta').textContent = '';
       document.getElementById('panel-grade').textContent = '';
-      document.getElementById('panel-grade').className = 'w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0';
+      document.getElementById('panel-grade').className = 'w-9 h-9 rounded-md flex items-center justify-center fig text-lg shrink-0';
       document.getElementById('panel-stats').innerHTML = '';
       document.getElementById('panel-map').innerHTML = '<span class="text-xs text-muted">Loading…</span>';
       document.getElementById('panel-surface-section').style.display = 'none';
-      document.getElementById('panel-ai').innerHTML = '<span class="animate-pulse">Loading analysis…</span>';
+      document.getElementById('panel-ai').innerHTML = '<span class="text-muted">Loading analysis…</span>';
 
       // Slide in
       overlay.classList.remove('hidden');
@@ -827,14 +830,14 @@ def _dashboard_html() -> str:
 
         const gradeEl = document.getElementById('panel-grade');
         gradeEl.textContent = d.grade;
-        gradeEl.className = `w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${GRADE_CLASS[d.grade] || 'grade-c'}`;
+        gradeEl.className = `w-9 h-9 rounded-md flex items-center justify-center fig text-lg shrink-0 ${GRADE_CLASS[d.grade] || 'grade-c'}`;
 
         document.getElementById('panel-stats').innerHTML = [
-          statCard('Distance', d.distance_km, 'km'),
+          statCard('Distance', f1(d.distance_km), 'km'),
           statCard('Duration', d.duration_min, 'min'),
-          statCard('Avg speed', d.avg_speed_kmh, 'km/h'),
-          statCard('Speed EAS', d.eas_kmh, 'km/h'),
-          statCard('Max speed', d.max_speed_kmh, 'km/h'),
+          statCard('Avg speed', f1(d.avg_speed_kmh), 'km/h'),
+          statCard('Speed EAS', f1(d.eas_kmh), 'km/h'),
+          statCard('Max speed', f1(d.max_speed_kmh), 'km/h'),
           statCard('Elevation', d.elevation_gain_m, 'm'),
           statCard('Highest point', d.elev_high_m != null ? Math.round(d.elev_high_m) : null, 'm'),
           statCard('Lowest point', d.elev_low_m != null ? Math.round(d.elev_low_m) : null, 'm'),
@@ -878,18 +881,20 @@ def _dashboard_html() -> str:
       return m != null ? (m / 1000).toFixed(1) + ' km' : '—';
     }
 
+    // num: right-aligned figure column; wide: hidden on phones so the segment name keeps room
     function segTable(rows, cols) {
-      if (!rows.length) return '<p class="text-sm text-muted">No data.</p>';
+      if (!rows.length) return '<p class="text-sm text-muted">No data</p>';
+      const cls = c => `${c.num ? 'text-right whitespace-nowrap' : 'text-left'} ${c.wide ? 'hidden sm:table-cell' : ''}`;
       const head = cols.map(c =>
-        `<th class="text-left text-xs font-bold uppercase tracking-wider text-muted px-3 py-2">${c.label}</th>`
+        `<th class="${cls(c)} text-xs font-medium text-muted px-3 sm:px-5 py-2.5">${c.label}</th>`
       ).join('');
       const body = rows.map(r =>
-        `<tr class="border-t border-border hover:bg-surface-high transition-colors">
-          ${cols.map(c => `<td class="px-3 py-2 text-sm text-on-surface">${c.render(r)}</td>`).join('')}
+        `<tr class="border-t border-border hover:bg-surface transition-colors">
+          ${cols.map(c => `<td class="${cls(c)} px-3 sm:px-5 py-2.5 text-sm text-on-surface">${c.render(r)}</td>`).join('')}
         </tr>`
       ).join('');
-      return `<table class="w-full bg-surface-low border border-border rounded-lg overflow-hidden">
-        <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+      return `<div class="bg-surface-low border border-border rounded-xl overflow-x-auto"><table class="w-full">
+        <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     let _segLoaded = false;
@@ -909,21 +914,21 @@ def _dashboard_html() -> str:
         }
 
         document.getElementById('seg-koms').innerHTML = segTable(d.records, [
-          { label: 'Segment',    render: r => escapeHtml(r.segment_name) },
-          { label: 'Distance',    render: r => fmtDist(r.distance_m) },
-          { label: 'Type',        render: r => `<span class="font-semibold ${r.record_type === 'KOM' ? 'text-lime' : 'text-amber-400'}">${r.record_type}</span>` },
-          { label: 'Best time', render: r => fmtTime(r.elapsed_time_s) },
-          { label: 'Date',       render: r => escapeHtml(r.activity_date || '—') },
+          { label: 'Segment',   render: r => escapeHtml(r.segment_name) },
+          { label: 'Distance',  num: true, wide: true, render: r => fmtDist(r.distance_m) },
+          { label: 'Type',      render: r => `<span class="${r.record_type === 'KOM' ? 'text-lime font-medium' : 'text-muted'}">${r.record_type}</span>` },
+          { label: 'Best time', num: true, render: r => fmtTime(r.elapsed_time_s) },
+          { label: 'Date',      num: true, render: r => escapeHtml(r.activity_date || '—') },
         ]);
 
         document.getElementById('seg-opps').innerHTML = segTable(d.opportunities, [
-          { label: 'Segment',    render: r => escapeHtml(r.segment_name) },
-          { label: 'Distance',    render: r => fmtDist(r.distance_m) },
-          { label: 'My time', render: r => fmtTime(r.elapsed_time_s) },
-          { label: 'Rank',       render: r => r.overall_rank ? `#${r.overall_rank}` : '—' },
-          { label: 'Trend',      render: r => r.is_trending
-              ? `<span class="text-lime font-semibold">${Math.abs(r.trend_pct)}% faster</span>`
-              : '<span class="text-muted">—</span>' },
+          { label: 'Segment',  render: r => escapeHtml(r.segment_name) },
+          { label: 'Distance', num: true, wide: true, render: r => fmtDist(r.distance_m) },
+          { label: 'My time',  num: true, render: r => fmtTime(r.elapsed_time_s) },
+          { label: 'Rank',     num: true, render: r => r.overall_rank ? `#${r.overall_rank}` : '—' },
+          { label: 'Trend',    num: true, render: r => r.is_trending
+              ? `${Math.abs(r.trend_pct)}% faster`
+              : '<span class="text-faint">—</span>' },
         ]);
       } catch (e) {
         console.error('Segment load error:', e);
@@ -934,62 +939,62 @@ def _dashboard_html() -> str:
       const isDash = tab === 'dashboard';
       document.getElementById('view-dashboard').classList.toggle('hidden', !isDash);
       document.getElementById('view-segmente').classList.toggle('hidden', isDash);
-      const active = 'border-lime text-lime';
+      const active = 'border-lime text-on-surface';
       const inactive = 'border-transparent text-muted hover:text-on-surface';
       document.getElementById('tab-dashboard').className =
-        `px-4 py-3 text-sm font-semibold border-b-2 ${isDash ? active : inactive} transition-colors`;
+        `py-3 text-sm font-medium border-b-2 ${isDash ? active : inactive} transition-colors`;
       document.getElementById('tab-segmente').className =
-        `px-4 py-3 text-sm font-semibold border-b-2 ${isDash ? inactive : active} transition-colors`;
-      if (!isDash) loadSegments();
+        `py-3 text-sm font-medium border-b-2 ${isDash ? inactive : active} transition-colors`;
+      if (isDash) drawTrends(); else loadSegments();
     }
   </script>
 
   <!-- Overlay -->
-  <div id="panel-overlay" class="fixed inset-0 bg-black/40 z-20 hidden" onclick="closePanel()"></div>
+  <div id="panel-overlay" class="fixed inset-0 bg-black/50 z-20 hidden" onclick="closePanel()"></div>
 
   <!-- Detail Panel -->
   <aside id="detail-panel"
     class="fixed top-0 right-0 h-full w-full sm:w-[420px] bg-surface border-l border-border z-30
-           transform translate-x-full transition-transform duration-300 ease-out overflow-y-auto">
+           transform translate-x-full transition-transform duration-300 motion-reduce:transition-none overflow-y-auto">
 
     <!-- Panel Header -->
-    <div class="sticky top-0 bg-surface border-b border-border px-4 py-3 flex items-center gap-3">
-      <button onclick="closePanel()" class="text-muted hover:text-on-surface transition-colors">
-        <span class="material-symbols-outlined text-xl">arrow_back</span>
+    <div class="sticky top-0 z-[1000] bg-surface border-b border-border px-4 py-3 flex items-center gap-2">
+      <button onclick="closePanel()" aria-label="Close" class="w-10 h-10 -ml-2 rounded-lg flex items-center justify-center text-muted hover:text-on-surface hover:bg-surface-high transition-colors">
+        <span class="material-symbols-outlined text-[20px]">arrow_back</span>
       </button>
       <div class="flex-1 min-w-0">
-        <p id="panel-name" class="text-sm font-semibold text-on-surface truncate"></p>
+        <p id="panel-name" class="text-sm font-medium text-on-surface truncate"></p>
         <p id="panel-meta" class="text-xs text-muted"></p>
       </div>
-      <div id="panel-grade" class="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"></div>
+      <div id="panel-grade" class="w-9 h-9 rounded-md flex items-center justify-center fig text-lg shrink-0"></div>
     </div>
 
     <!-- Stats Grid -->
-    <div class="px-4 py-4">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Stats</h3>
+    <div class="px-4 pt-4 pb-6">
+      <h3 class="text-sm font-medium text-muted mb-3">Stats</h3>
       <div id="panel-stats" class="grid grid-cols-2 gap-2"></div>
     </div>
 
     <!-- Route Map -->
-    <div class="px-4 pb-4">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Route</h3>
-      <div id="panel-map" class="rounded-lg overflow-hidden h-48 bg-surface-low border border-border
+    <div class="px-4 pb-6">
+      <h3 class="text-sm font-medium text-muted mb-3">Route</h3>
+      <div id="panel-map" class="rounded-xl overflow-hidden h-48 bg-surface-low border border-border
                                   flex items-center justify-center text-muted text-xs">
         <span>No route available</span>
       </div>
     </div>
 
     <!-- Surface Analysis -->
-    <div class="px-4 pb-4" id="panel-surface-section" style="display:none">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">Surface</h3>
+    <div class="px-4 pb-6" id="panel-surface-section" style="display:none">
+      <h3 class="text-sm font-medium text-muted mb-3">Surface</h3>
       <div id="panel-surface"></div>
     </div>
 
     <!-- AI Analysis -->
     <div class="px-4 pb-8">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-muted mb-3">AI analysis</h3>
-      <div id="panel-ai" class="text-sm text-muted italic leading-relaxed">
-        <span class="animate-pulse">Loading analysis…</span>
+      <h3 class="text-sm font-medium text-muted mb-3">AI analysis</h3>
+      <div id="panel-ai" class="text-sm text-on-surface leading-relaxed">
+        <span class="text-muted">Loading analysis…</span>
       </div>
     </div>
   </aside>
